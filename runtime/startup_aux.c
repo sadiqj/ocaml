@@ -88,6 +88,7 @@ uintnat caml_init_custom_minor_max_bsz = Custom_minor_max_bsz_def;
 extern int caml_parser_trace;
 uintnat caml_trace_level = 0;
 int caml_cleanup_on_exit = 0;
+uintnat caml_minor_heap_dump = 0;
 
 
 static void scanmult (char_os *opt, uintnat *var)
@@ -133,6 +134,7 @@ void caml_parse_ocamlrunparam(void)
       case 's': scanmult (opt, &caml_init_minor_heap_wsz); break;
       case 't': scanmult (opt, &caml_trace_level); break;
       case 'v': scanmult (opt, &caml_verb_gc); break;
+      case 'd': scanmult (opt, &caml_minor_heap_dump); break;
       case 'w': scanmult (opt, &caml_init_major_window); break;
       case 'W': scanmult (opt, &caml_runtime_warnings); break;
       }

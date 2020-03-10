@@ -350,6 +350,8 @@ CAMLextern int caml_read_directory(char_os * dirname,
 /* GC flags and messages */
 
 extern uintnat caml_verb_gc;
+extern uintnat caml_minor_heap_dump;
+
 void caml_gc_message (int, char *, ...)
 #ifdef __GNUC__
   __attribute__ ((format (printf, 2, 3)))

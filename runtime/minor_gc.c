@@ -65,6 +65,8 @@
 
 struct generic_table CAML_TABLE_STRUCT(char);
 
+static FILE* minor_heap_bin;
+
 void caml_alloc_minor_tables ()
 {
   Caml_state->ref_table =
@@ -355,6 +357,21 @@ void caml_empty_minor_heap (void)
   uintnat prev_alloc_words;
   struct caml_ephe_ref_elt *re;
   CAML_INSTR_DECLARE (tmr);
+
+  if( caml_minor_heap_dump > 0 ) {
+    if( !minor_heap_bin ) {
+      minor_heap_bin = fopen_os("minor-heaps.bin", T("wb"));
+    }
+    // Write out minor heap
+    fwrite(&Caml_state->young_start, sizeof(uintnat), 1, minor_heap_bin);
+    fwrite(&Caml_state->young_end, sizeof(uintnat), 1, minor_heap_bin);
+    fwrite(&Caml_state->young_ptr, sizeof(uintnat), 1, minor_heap_bin);
+    /*uintnat ref_table_size = Caml_state->ref_table->ptr - Caml_state->ref_table->base;
+    fwrite(&ref_table_size, sizeof(uintnat), 1, minor_heap_bin);
+    fwrite(Caml_state->ref_table->base, sizeof(uintnat), ref_table_size, minor_heap_bin);*/
+    fwrite(Caml_state->young_ptr, sizeof(uintnat), Caml_state->young_end - Caml_state->young_ptr, minor_heap_bin);
+    fflush(minor_heap_bin);
+  }
 
   if (Caml_state->young_ptr != Caml_state->young_alloc_end){
     CAMLassert_young_header(*(header_t*)Caml_state->young_ptr);

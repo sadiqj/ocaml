@@ -363,13 +363,13 @@ void caml_empty_minor_heap (void)
       minor_heap_bin = fopen_os("minor-heaps.bin", T("wb"));
     }
     // Write out minor heap
-    fwrite(&Caml_state->young_start, sizeof(uintnat), 1, minor_heap_bin);
-    fwrite(&Caml_state->young_end, sizeof(uintnat), 1, minor_heap_bin);
+    fwrite(&Caml_state->young_alloc_start, sizeof(uintnat), 1, minor_heap_bin);
+    fwrite(&Caml_state->young_alloc_end, sizeof(uintnat), 1, minor_heap_bin);
     fwrite(&Caml_state->young_ptr, sizeof(uintnat), 1, minor_heap_bin);
     /*uintnat ref_table_size = Caml_state->ref_table->ptr - Caml_state->ref_table->base;
     fwrite(&ref_table_size, sizeof(uintnat), 1, minor_heap_bin);
     fwrite(Caml_state->ref_table->base, sizeof(uintnat), ref_table_size, minor_heap_bin);*/
-    fwrite(Caml_state->young_ptr, sizeof(uintnat), Caml_state->young_end - Caml_state->young_ptr, minor_heap_bin);
+    fwrite(Caml_state->young_ptr, sizeof(uintnat), Caml_state->young_alloc_end - Caml_state->young_ptr, minor_heap_bin);
     fflush(minor_heap_bin);
   }
 

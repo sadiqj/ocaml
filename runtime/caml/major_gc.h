@@ -26,12 +26,16 @@ typedef struct {
   asize_t alloc;         /* in bytes, used for compaction */
   asize_t size;          /* in bytes */
   char *next;
+  int requires_rescan;
+  asize_t rescan_offset; /* in words */
 } heap_chunk_head;
 
 #define Chunk_size(c) (((heap_chunk_head *) (c)) [-1]).size
 #define Chunk_alloc(c) (((heap_chunk_head *) (c)) [-1]).alloc
 #define Chunk_next(c) (((heap_chunk_head *) (c)) [-1]).next
 #define Chunk_block(c) (((heap_chunk_head *) (c)) [-1]).block
+#define Chunk_requires_rescan(c) (((heap_chunk_head *) (c)) [-1]).requires_rescan
+#define Chunk_rescan_offset(c) (((heap_chunk_head *) (c)) [-1]).rescan_offset
 
 extern int caml_gc_phase;
 extern int caml_gc_subphase;

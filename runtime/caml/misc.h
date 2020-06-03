@@ -442,6 +442,8 @@ extern int caml_snwprintf(wchar_t * buf,
  */
 typedef void * backtrace_slot;
 
+#define Is_power_of_2(x) (((x) & ((x) - 1)) == 0)
+
 #ifdef __cplusplus
 }
 #endif

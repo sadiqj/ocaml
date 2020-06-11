@@ -53,7 +53,6 @@ Caml_inline double fmin(double a, double b) {
 typedef struct {
   value block;
   uintnat offset;
-  uintnat end;
 } mark_entry;
 
 struct mark_stack {
@@ -349,7 +348,9 @@ static void realloc_mark_stack (struct mark_stack* stk)
 __attribute__((always_inline)) inline static void mark_stack_push(struct mark_stack* stk, mark_entry me, intnat* work)
 {
   value v;
-  int i, end = (me.end < 8 ? me.end : 8);
+  int i, block_end = Wosize_val(me.block), end;
+  
+  end = (block_end < 8 ? block_end : 8);
 
   CAMLassert(Is_black_val(me.block));
   CAMLassert(Is_block(me.block));
@@ -366,11 +367,11 @@ __attribute__((always_inline)) inline static void mark_stack_push(struct mark_st
       break;
   }
 
-  if (i == me.end) {
+  if (i == block_end) {
     /* nothing left to mark */
     if( work != NULL ) {
       /* we should take credit for it though */
-      *work -= Whsize_wosize(me.end);
+      *work -= Whsize_wosize(block_end);
     }
     return;
   } 
@@ -416,7 +417,7 @@ void caml_darken (value v, value *p /* not used */)
       ephe_list_pure = 0;
       Hd_val (v) = Blackhd_hd (h);
       if (t < No_scan_tag){
-        mark_entry me = {v, 0, Wosize_val(v)};
+        mark_entry me = {v, 0};
         mark_stack_push(Caml_state->mark_stack, me, NULL);
       }
     }
@@ -439,7 +440,7 @@ static int redarken_chunk(char* heap_chunk, struct mark_stack* stk) {
 
     if( Is_black_hd(hd) && Tag_hd(hd) < No_scan_tag ) {
       if( stk->count < stk->size/2 ) {
-        mark_entry me = { Val_hp(p), 0, Wosize_hd(hd) };
+        mark_entry me = { Val_hp(p), 0 };
         mark_stack_push(stk, me, NULL);
       } else {
         /* Don't add to the mark stack as this would cause it to overflow again */
@@ -541,7 +542,7 @@ static inline void mark_slice_darken(struct mark_stack* stk, value v, mlsize_t i
       ephe_list_pure = 0;
       Hd_val (child) = Blackhd_hd (chd);
       if( Tag_hd(chd) < No_scan_tag ) {
-        mark_entry me = {child, 0, Wosize_hd(chd)};
+        mark_entry me = {child, 0};
         mark_stack_push(stk, me, work);
       } 
       else {
@@ -636,6 +637,7 @@ static void mark_ephe_aux (struct mark_stack *stk, intnat *work,
 static void mark_slice (intnat work)
 {
   mark_entry me = {0};
+  mlsize_t me_end = 0;
 #ifdef CAML_INSTR
   int slice_fields = 0; /** eventlog counters */
 #endif /*CAML_INSTR*/
@@ -648,10 +650,11 @@ static void mark_slice (intnat work)
   while (1){
     int can_mark = 0;
 
-    if (me.offset == me.end) {
+    if (me.offset == me_end) {
       if (stk->count > 0)
       {
         me = stk->stack[--stk->count];
+        me_end = Wosize_val(me.block);
         can_mark = 1;
       }
     }
@@ -677,7 +680,7 @@ static void mark_slice (intnat work)
 
       work--;
 
-      if( me.offset == me.end ) {
+      if( me.offset == me_end ) {
         work--; /* Include header word */
       }
     } else if( rescan_chunk != NULL ) {

@@ -133,7 +133,7 @@ static unsigned long major_gc_counter = 0;
 
 void (*caml_major_gc_hook)(void) = NULL;
 
-#define HEAP_RANGE_SIZE_BITS 16
+#define HEAP_RANGE_SIZE_BITS 20
 #define HEAP_RANGE_SIZE (1 << HEAP_RANGE_SIZE_BITS)
 
 struct heap_range {
@@ -171,14 +171,14 @@ static value range_of_block(value block) {
 static void mark_stack_prune (struct mark_stack* stk)
 {
   struct addrmap t = ADDRMAP_INIT;
-  int count = 0, entry;
+  int count = 0, entry, chunks_postponed = 0;
   addrmap_iterator i;
   uintnat mark_stack_count = stk->count;
   mark_entry* mark_stack = stk->stack;
   /* space used by the computations below */
   uintnat table_max = mark_stack_count / 100;
   /* amount of space we want to free up */
-  int entries_to_free = (uintnat)(mark_stack_count * 0.20);
+  int entries_to_free = (uintnat)(mark_stack_count * 0.50);
   
   char* heap_chunk = caml_heap_start;
   struct heap_range* heap_ranges;
@@ -227,9 +227,9 @@ static void mark_stack_prune (struct mark_stack* stk)
     }
   }
 
-  /* t now contains all pools that occur at least 100 times.
-     If no pools occur at least 100 times, t is some arbitrary subset of pools.
-     Next, we get an accurate count of the occurrences of the pools in t */
+  /* t now contains all heap ranges that occur at least 100 times.
+     If no heap ranges occur at least 100 times, t is some arbitrary subset of heap ranges.
+     Next, we get an accurate count of the occurrences of the heap ranges in t */
 
   for (i = caml_addrmap_iterator(&t);
        caml_addrmap_iter_ok(&t, i);
@@ -242,7 +242,7 @@ static void mark_stack_prune (struct mark_stack* stk)
       (*caml_addrmap_insert_pos(&t, p))++;
   }
 
-  /* Next, find a subset of those pools that covers enough entries */
+  /* Next, find a subset of those heap ranges that cover enough entries */
 
   heap_ranges = caml_stat_alloc(count * sizeof(struct heap_range));
 
@@ -284,6 +284,7 @@ static void mark_stack_prune (struct mark_stack* stk)
       if( heap_range_addr+HEAP_RANGE_SIZE >= chunk_start ) { /* heap ranges definitely overlaps with chunk */
         Chunk_requires_rescan(heap_chunk) = 1;
         Chunk_rescan_offset(heap_chunk) = 0;
+        chunks_postponed++;
         
         /* check if we need to reset the current rescan_chunk */
         if( rescan_chunk == NULL || heap_chunk < rescan_chunk ) {
@@ -317,8 +318,8 @@ static void mark_stack_prune (struct mark_stack* stk)
 
   caml_stat_free(heap_ranges);
 
-  caml_gc_message(0x08, "Mark stack overflow. Postponing %d pools (%.1f%%, leaving %d).\n",
-              count-start, 100. * (double)total / (double)mark_stack_count,
+  caml_gc_message(0x08, "Mark stack overflow. Postponing %d chunks (%.1f%%, leaving %d).\n",
+              chunks_postponed, 100. * (double)total / (double)mark_stack_count,
               (int)stk->count);
 }
 
@@ -327,7 +328,7 @@ static void realloc_mark_stack (struct mark_stack* stk)
   mark_entry* new;
   uintnat mark_stack_bsize = stk->size * sizeof(mark_entry);
 
-  if ( mark_stack_bsize < Caml_state->stat_heap_wsz / 32 ) {
+  if ( 1 /* mark_stack_bsize < Caml_state->stat_heap_wsz / 32 */ ) {
     caml_gc_message (0x08, "Growing mark stack to %"
                            ARCH_INTNAT_PRINTF_FORMAT "uk bytes\n",
                      (intnat) mark_stack_bsize * 2 / 1024);
@@ -345,7 +346,7 @@ static void realloc_mark_stack (struct mark_stack* stk)
   mark_stack_prune(stk);
 }
 
-static void mark_stack_push(struct mark_stack* stk, mark_entry me)
+static void mark_stack_push(struct mark_stack* stk, mark_entry me, intnat* work)
 {
   value v;
   int i;
@@ -358,9 +359,13 @@ static void mark_stack_push(struct mark_stack* stk, mark_entry me)
   /* Optimisation to avoid pushing small, unmarkable objects such as [Some 42]
    * into the mark stack. */
   for (i = 0; i < 16; i++) {
-    if (me.offset == me.end)
-      /* nothing left to mark */
+    if (me.offset == me.end) {
+      /* nothing left to mark but take credit */
+      if( work != NULL ) {
+        *work -= Whsize_wosize(me.end);
+      }
       return;
+    }
     v = Field(me.block, me.offset);
 
     if (Is_block(v) && !Is_young(v))
@@ -371,9 +376,14 @@ static void mark_stack_push(struct mark_stack* stk, mark_entry me)
       me.offset++;
   }
 
-  if (me.offset == me.end)
+  if (me.offset == me.end) {
     /* nothing left to mark */
+    if( work != NULL ) {
+      /* we should take credit for it though */
+      *work -= Whsize_wosize(me.end);
+    }
     return;
+  }
 
   if (stk->count == stk->size)
     realloc_mark_stack(stk);
@@ -411,7 +421,7 @@ void caml_darken (value v, value *p /* not used */)
       Hd_val (v) = Blackhd_hd (h);
       if (t < No_scan_tag){
         mark_entry me = {v, 0, Wosize_val(v)};
-        mark_stack_push(Caml_state->mark_stack, me);
+        mark_stack_push(Caml_state->mark_stack, me, NULL);
       }
     }
   }
@@ -434,7 +444,7 @@ static int redarken_chunk(char* heap_chunk, struct mark_stack* stk) {
     if( Is_black_hd(hd) && Tag_hd(hd) < No_scan_tag ) {
       if( stk->count < stk->size/2 ) {
         mark_entry me = { Val_hp(p), 0, Wosize_hd(hd) };
-        mark_stack_push(stk, me);
+        mark_stack_push(stk, me, NULL);
       } else {
         /* Don't add to the mark stack as this would cause it to overflow again */
         Chunk_rescan_offset(heap_chunk) = p - chunk_start;
@@ -486,7 +496,7 @@ static void init_sweep_phase(void)
 
 /* auxiliary function of mark_slice */
 static inline void mark_slice_darken(struct mark_stack* stk, value v, mlsize_t i,
-                                       int in_ephemeron, int *slice_pointers)
+                                       int in_ephemeron, int *slice_pointers, intnat *work)
 {
   value child;
   header_t chd;
@@ -536,7 +546,10 @@ static inline void mark_slice_darken(struct mark_stack* stk, value v, mlsize_t i
       Hd_val (child) = Blackhd_hd (chd);
       if( Tag_hd(chd) < No_scan_tag ) {
         mark_entry me = {child, 0, Wosize_hd(chd)};
-        mark_stack_push(stk, me);
+        mark_stack_push(stk, me, work);
+      } 
+      else {
+        *work -= 1; /* Account for header */
       }
     }
   }
@@ -597,7 +610,7 @@ static void mark_ephe_aux (struct mark_stack *stk, intnat *work,
       mark_slice_darken(stk, v,
                                         CAML_EPHE_DATA_OFFSET,
                                         /*in_ephemeron=*/1,
-                                        slice_pointers);
+                                        slice_pointers, work);
     } else { /* not triggered move to the next one */
       ephes_to_check = &Field(v,CAML_EPHE_LINK_OFFSET);
       return;
@@ -636,7 +649,7 @@ static void mark_slice (intnat work)
   caml_gc_message (0x40, "Marking %"ARCH_INTNAT_PRINTF_FORMAT"d words\n", work);
   caml_gc_message (0x40, "Subphase = %d\n", caml_gc_subphase);
 
-  while (work > 0){
+  while (1){
     int can_mark = 0;
 
     if (me.offset == me.end) {
@@ -652,7 +665,7 @@ static void mark_slice (intnat work)
     }
 
     if (work <= 0) {
-      mark_stack_push(stk, me);
+      mark_stack_push(stk, me, NULL);
       break;
     }
 
@@ -662,7 +675,13 @@ static void mark_slice (intnat work)
                 Tag_val(me.block) < No_scan_tag);
 
       mark_slice_darken(stk, me.block, me.offset++, /*in_ephemeron=*/ 0,
-                                              &slice_pointers);
+                                              &slice_pointers, &work);
+
+      work--;
+
+      if( me.offset == me.end ) {
+        work--; /* Include header word */
+      }
     } else if( rescan_chunk != NULL ) {
       /* There are chunks that need to be rescanned because we overflowed our mark stack */
       if( redarken_chunk(rescan_chunk, stk) ) {

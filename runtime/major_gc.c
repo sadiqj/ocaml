@@ -358,32 +358,28 @@ __attribute__((always_inline)) inline static void mark_stack_push(struct mark_st
 
   /* Optimisation to avoid pushing small, unmarkable objects such as [Some 42]
    * into the mark stack. */
-  for (i = 0; i < 16; i++) {
-    if (me.offset == me.end) {
-      /* nothing left to mark but take credit */
-      if( work != NULL ) {
-        *work -= Whsize_wosize(me.end);
-      }
-      return;
-    }
-    v = Field(me.block, me.offset);
+  for (i = me.offset; i < me.end; i++) {
+    v = Field(me.block, i);
 
     if (Is_block(v) && !Is_young(v))
       /* found something to mark */
       break;
-    else
-      /* keep going */
-      me.offset++;
   }
 
-  if (me.offset == me.end) {
+  if (i == me.end) {
     /* nothing left to mark */
     if( work != NULL ) {
       /* we should take credit for it though */
       *work -= Whsize_wosize(me.end);
     }
     return;
+  } else {
+    if( work != NULL ) {
+      *work -= i;
+    }
   }
+
+  me.offset = i;
 
   if (stk->count == stk->size)
     realloc_mark_stack(stk);

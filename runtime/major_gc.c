@@ -346,7 +346,7 @@ static void realloc_mark_stack (struct mark_stack* stk)
   mark_stack_prune(stk);
 }
 
-static void mark_stack_push(struct mark_stack* stk, mark_entry me, intnat* work)
+__attribute__((always_inline)) inline static void mark_stack_push(struct mark_stack* stk, mark_entry me, intnat* work)
 {
   value v;
   int i;
@@ -665,7 +665,9 @@ static void mark_slice (intnat work)
     }
 
     if (work <= 0) {
-      mark_stack_push(stk, me, NULL);
+      if( can_mark ) {
+        mark_stack_push(stk, me, NULL);
+      }
       break;
     }
 

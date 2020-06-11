@@ -328,7 +328,7 @@ static void realloc_mark_stack (struct mark_stack* stk)
   mark_entry* new;
   uintnat mark_stack_bsize = stk->size * sizeof(mark_entry);
 
-  if ( 1 /* mark_stack_bsize < Caml_state->stat_heap_wsz / 32 */ ) {
+  if ( mark_stack_bsize < Caml_state->stat_heap_wsz / 32 ) {
     caml_gc_message (0x08, "Growing mark stack to %"
                            ARCH_INTNAT_PRINTF_FORMAT "uk bytes\n",
                      (intnat) mark_stack_bsize * 2 / 1024);
@@ -349,7 +349,7 @@ static void realloc_mark_stack (struct mark_stack* stk)
 __attribute__((always_inline)) inline static void mark_stack_push(struct mark_stack* stk, mark_entry me, intnat* work)
 {
   value v;
-  int i;
+  int i, end = (me.end < 8 ? me.end : 8);
 
   CAMLassert(Is_black_val(me.block));
   CAMLassert(Is_block(me.block));
@@ -358,10 +358,10 @@ __attribute__((always_inline)) inline static void mark_stack_push(struct mark_st
 
   /* Optimisation to avoid pushing small, unmarkable objects such as [Some 42]
    * into the mark stack. */
-  for (i = me.offset; i < me.end; i++) {
+  for (i = me.offset; i < end; i++) {
     v = Field(me.block, i);
 
-    if (Is_block(v) && !Is_young(v))
+    if (Is_block(v))
       /* found something to mark */
       break;
   }
@@ -373,10 +373,10 @@ __attribute__((always_inline)) inline static void mark_stack_push(struct mark_st
       *work -= Whsize_wosize(me.end);
     }
     return;
-  } else {
-    if( work != NULL ) {
-      *work -= i;
-    }
+  } 
+
+  if( work != NULL ) {
+    *work -= i;
   }
 
   me.offset = i;

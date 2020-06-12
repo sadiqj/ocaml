@@ -345,11 +345,13 @@ static void realloc_mark_stack (struct mark_stack* stk)
   mark_stack_prune(stk);
 }
 
-__attribute__((always_inline)) inline static void mark_stack_push(struct mark_stack* stk, mark_entry me, intnat* work)
+Caml_inline void mark_stack_push(struct mark_stack* stk, mark_entry me, intnat* work)
 {
   value v;
   int i, block_end = Wosize_val(me.block), end;
-  
+
+  CAMLassert (Is_in_heap (me.block) || Is_black_hd (Hd_val(me.block)));
+
   end = (block_end < 8 ? block_end : 8);
 
   CAMLassert(Is_black_val(me.block));
@@ -501,7 +503,7 @@ static inline void mark_slice_darken(struct mark_stack* stk, value v, mlsize_t i
   child = Field (v, i);
 
 #ifdef NATIVE_CODE_AND_NO_NAKED_POINTERS
-  if (Is_block (child) && ! Is_young (child)) {
+  if (Is_block (child) && ! Is_young (child) && Is_in_heap (child)) {
 #else
   if (Is_block (child) && Is_in_heap (child)) {
 #endif

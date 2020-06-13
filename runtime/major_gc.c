@@ -352,12 +352,21 @@ Caml_inline void mark_stack_push(struct mark_stack* stk, mark_entry me, intnat* 
 
   CAMLassert (Is_in_heap (me.block) || Is_black_hd (Hd_val(me.block)));
 
-  end = (block_end < 8 ? block_end : 8);
-
   CAMLassert(Is_black_val(me.block));
   CAMLassert(Is_block(me.block));
   CAMLassert(Tag_val(me.block) != Infix_tag);
   CAMLassert(Tag_val(me.block) < No_scan_tag);
+
+#ifdef NO_NAKED_POINTERS
+  if (Tag_val(me.block) == Closure_tag) {
+    /* Skip the code pointers and integers at beginning of closure;
+        start scanning at the first word of the environment part. */
+    me.offset = Start_env_closinfo(Closinfo_val(me.block));
+    CAMLassert(me.offset <= Wosize_val(me.block));
+  }
+#endif
+
+  end = (block_end < 8 ? block_end : 8);
 
   /* Optimisation to avoid pushing small, unmarkable objects such as [Some 42]
    * into the mark stack. */
@@ -503,7 +512,7 @@ static inline void mark_slice_darken(struct mark_stack* stk, value v, mlsize_t i
   child = Field (v, i);
 
 #ifdef NATIVE_CODE_AND_NO_NAKED_POINTERS
-  if (Is_block (child) && ! Is_young (child) && Is_in_heap (child)) {
+  if (Is_block (child) && ! Is_young (child) && Wosize_val (child) > 0) {
 #else
   if (Is_block (child) && Is_in_heap (child)) {
 #endif

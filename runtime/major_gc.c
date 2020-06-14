@@ -557,7 +557,7 @@ static inline void mark_slice_darken(struct mark_stack* stk, value v, mlsize_t i
         mark_stack_push(stk, me, work);
       } 
       else {
-        *work -= 1; /* Account for header */
+        *work -= Whsize_val(child); /* Account for header */
       }
     }
   }

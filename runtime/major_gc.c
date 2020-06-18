@@ -373,7 +373,7 @@ Caml_inline void mark_stack_push(struct mark_stack* stk, mark_entry me, intnat* 
   for (i = me.offset; i < end; i++) {
     v = Field(me.block, i);
 
-    if (Is_block(v))
+    if (Is_block(v) && !Is_black_val(v))
       /* found something to mark */
       break;
   }

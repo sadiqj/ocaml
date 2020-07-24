@@ -35,6 +35,9 @@ type integer_operation =
         second being the pointer to the trie node for the current function
         (and the first being as per non-Spacetime mode). *)
 
+type poll_test_direction =
+  Ipending | Inotpending
+
 type float_comparison = Cmm.float_comparison
 
 type test =
@@ -42,6 +45,7 @@ type test =
   | Ifalsetest
   | Iinttest of integer_comparison
   | Iinttest_imm of integer_comparison * int
+  | Ipolltest of poll_test_direction
   | Ifloattest of float_comparison
   | Ioddtest
   | Ieventest
@@ -61,11 +65,8 @@ type operation =
   | Istackoffset of int
   | Iload of Cmm.memory_chunk * Arch.addressing_mode
   | Istore of Cmm.memory_chunk * Arch.addressing_mode * bool
-                                 (* false = initialization, true = assignment *)
   | Ialloc of { bytes : int; label_after_call_gc : label option;
       dbginfo : Debuginfo.alloc_dbginfo; spacetime_index : int; }
-    (** For Spacetime only, Ialloc instructions take one argument, being the
-        pointer to the trie node for the current function. *)
   | Iintop of integer_operation
   | Iintop_imm of integer_operation * int
   | Inegf | Iabsf | Iaddf | Isubf | Imulf | Idivf
@@ -73,12 +74,8 @@ type operation =
   | Ispecific of Arch.specific_operation
   | Iname_for_debugger of { ident : Backend_var.t; which_parameter : int option;
       provenance : unit option; is_assignment : bool; }
-    (** [Iname_for_debugger] has the following semantics:
-        (a) The argument register(s) is/are deemed to contain the value of the
-            given identifier.
-        (b) If [is_assignment] is [true], any information about other [Reg.t]s
-            that have been previously deemed to hold the value of that
-            identifier is forgotten. *)
+  | Ipollcall of { check_young_limit: bool }
+
 
 type instruction =
   { desc: instruction_desc;

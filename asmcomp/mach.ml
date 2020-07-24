@@ -28,6 +28,9 @@ type integer_operation =
   | Icheckbound of { label_after_error : label option;
         spacetime_index : int; }
 
+type poll_test_direction =
+  Ipending | Inotpending
+
 type float_comparison = Cmm.float_comparison
 
 type test =
@@ -35,6 +38,7 @@ type test =
   | Ifalsetest
   | Iinttest of integer_comparison
   | Iinttest_imm of integer_comparison * int
+  | Ipolltest of poll_test_direction
   | Ifloattest of float_comparison
   | Ioddtest
   | Ieventest
@@ -63,6 +67,7 @@ type operation =
   | Ispecific of Arch.specific_operation
   | Iname_for_debugger of { ident : Backend_var.t; which_parameter : int option;
       provenance : unit option; is_assignment : bool; }
+  | Ipollcall of { check_young_limit: bool }
 
 type instruction =
   { desc: instruction_desc;
@@ -179,6 +184,7 @@ let spacetime_node_hole_pointer_is_live_before insn =
          we use the node hole pointer for these, and we do not need to say
          that it is live at such points. *)
       false
+    | Ipollcall _ -> false
     | Iintop op | Iintop_imm (op, _) ->
       begin match op with
       | Icheckbound _
@@ -203,5 +209,5 @@ let operation_can_raise op =
   match op with
   | Icall_ind _ | Icall_imm _ | Iextcall _
   | Iintop (Icheckbound _) | Iintop_imm (Icheckbound _, _)
-  | Ialloc _ -> true
+  | Ialloc _ | Ipollcall _ -> true
   | _ -> false

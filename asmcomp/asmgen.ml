@@ -78,6 +78,20 @@ let rec regalloc ~ppf_dump round fd =
 
 let (++) x f = f x
 
+let polling_funcdecl (i : Mach.fundecl): Mach.fundecl =
+  let f = i.fun_body in
+  let new_instructions : Mach.instruction =
+  { desc = Iop(Ipoll);
+    next = f;
+    arg = f.arg;
+    res = f.res;
+    dbg = f.dbg;
+    live = f.live;
+    available_before = f.available_before;
+    available_across = f.available_across } in
+  { i with fun_body = new_instructions }
+  
+
 let compile_fundecl ~ppf_dump fd_cmm =
   Proc.init ();
   Reg.reset();
@@ -98,6 +112,7 @@ let compile_fundecl ~ppf_dump fd_cmm =
   ++ pass_dump_if ppf_dump dump_split "After live range splitting"
   ++ Profile.record ~accumulate:true "liveness" liveness
   ++ Profile.record ~accumulate:true "regalloc" (regalloc ~ppf_dump 1)
+  ++ Profile.record ~accumulate:true "polling" polling_funcdecl
   ++ Profile.record ~accumulate:true "available_regs" Available_regs.fundecl
   ++ Profile.record ~accumulate:true "linearize" Linearize.fundecl
   ++ pass_dump_linear_if ppf_dump dump_linear "Linearized code"

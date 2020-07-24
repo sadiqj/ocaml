@@ -924,6 +924,7 @@ let emit_instr fallthrough i =
           I.pop r11;
           I.jmp r11
       end
+  | Lop(Ipoll) -> I.nop ()
 
 let rec emit_all fallthrough i =
   match i.desc with

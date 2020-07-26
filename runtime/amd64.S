@@ -448,14 +448,20 @@ CFI_ENDPROC
 ENDFUNCTION(G(caml_allocN))
 
 /* Polling */
+
 FUNCTION(G(caml_call_poll))
         CFI_STARTPROC
+<<<<<<< HEAD
 LBL(caml_call_gc):
     /* Record lowest stack address and return address. */
         movq    (%rsp), %r11
         movq    %r11, Caml_state(last_return_address)
         leaq    8(%rsp), %r11
         movq    %r11, Caml_state(bottom_of_stack)
+=======
+        RECORD_STACK_FRAME(0)
+LBL(caml_call_poll):
+>>>>>>> fc9a57c92... hacky hacky
     /* Touch the stack to trigger a recoverable segfault
        if insufficient space remains */
         subq    $(STACK_PROBE_SIZE), %rsp; CFI_ADJUST(STACK_PROBE_SIZE);
@@ -482,9 +488,6 @@ LBL(caml_call_gc):
         movq    %rsp, Caml_state(gc_regs)
     /* Save young_ptr */
         movq    %r15, Caml_state(young_ptr)
-#ifdef WITH_SPACETIME
-        STORE_VAR(%r13, caml_spacetime_trie_node_ptr)
-#endif
     /* Save floating-point registers */
         subq    $(16*8), %rsp; CFI_ADJUST (16*8);
         movsd   %xmm0, 0*8(%rsp)

@@ -207,4 +207,5 @@ let operation_can_raise op =
   | Icall_ind _ | Icall_imm _ | Iextcall _
   | Iintop (Icheckbound _) | Iintop_imm (Icheckbound _, _)
   | Ialloc _ -> true
+  | Ipoll -> true
   | _ -> false

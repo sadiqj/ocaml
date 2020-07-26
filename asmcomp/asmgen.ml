@@ -99,7 +99,7 @@ let add_poll_before (f : Mach.instruction) : Mach.instruction =
   | Itrywith of instruction * instruction
   | Iraise of Lambda.raise_kind *)
 
-let rec add_polls_to_exit (f : Mach.instruction) =
+(*let rec add_polls_to_exit (f : Mach.instruction) =
   match f.desc with
   | Iifthenelse(test, i0, i1) ->
     { f with desc = Iifthenelse(test, add_polls_to_exit i0, add_polls_to_exit i1); next = add_polls_to_exit f.next }
@@ -115,11 +115,11 @@ let rec add_polls_to_exit (f : Mach.instruction) =
   | Iend | Ireturn | Iop(Itailcall_ind _) | Iop(Itailcall_imm _) | Iraise _ ->
     f    
   | Iop(_) -> 
-    { f with next = add_polls_to_exit f.next }
+    { f with next = add_polls_to_exit f.next }*)
     
 let polling_funcdecl (i : Mach.fundecl): Mach.fundecl =
   let f = add_poll_before i.fun_body in
-    { i with fun_body = add_polls_to_exit f }
+    { i with fun_body = (*add_polls_to_exit*) f }
   
 
 let compile_fundecl ~ppf_dump fd_cmm =

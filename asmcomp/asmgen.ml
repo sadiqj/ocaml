@@ -88,18 +88,7 @@ let add_poll_before (f : Mach.instruction) : Mach.instruction =
     available_before = f.available_before;
     available_across = f.available_across }
 
-(* and instruction_desc =
-    Iend
-  | Iop of operation
-  | Ireturn
-  | Iifthenelse of test * instruction * instruction
-  | Iswitch of int array * instruction array
-  | Icatch of Cmm.rec_flag * (int * instruction) list * instruction
-  | Iexit of int
-  | Itrywith of instruction * instruction
-  | Iraise of Lambda.raise_kind *)
-
-(*let rec add_polls_to_exit (f : Mach.instruction) =
+let rec add_polls_to_exit (f : Mach.instruction) =
   match f.desc with
   | Iifthenelse(test, i0, i1) ->
     { f with desc = Iifthenelse(test, add_polls_to_exit i0, add_polls_to_exit i1); next = add_polls_to_exit f.next }
@@ -115,11 +104,11 @@ let add_poll_before (f : Mach.instruction) : Mach.instruction =
   | Iend | Ireturn | Iop(Itailcall_ind _) | Iop(Itailcall_imm _) | Iraise _ ->
     f    
   | Iop(_) -> 
-    { f with next = add_polls_to_exit f.next }*)
+    { f with next = add_polls_to_exit f.next }
     
 let polling_funcdecl (i : Mach.fundecl): Mach.fundecl =
   let f = add_poll_before i.fun_body in
-    { i with fun_body = (*add_polls_to_exit*) f }
+    { i with fun_body = add_polls_to_exit f }
   
 
 let compile_fundecl ~ppf_dump fd_cmm =
@@ -133,9 +122,8 @@ let compile_fundecl ~ppf_dump fd_cmm =
   ++ Profile.record ~accumulate:true "cse" CSE.fundecl
   ++ pass_dump_if ppf_dump dump_cse "After CSE"
   ++ Profile.record ~accumulate:true "liveness" liveness
-  ++ Profile.record ~accumulate:true "deadcode" Deadcode.fundecl
-  ++ Profile.record ~accumulate:true "liveness" liveness
   ++ Profile.record ~accumulate:true "polling" polling_funcdecl
+  ++ Profile.record ~accumulate:true "deadcode" Deadcode.fundecl
   ++ pass_dump_if ppf_dump dump_live "Liveness analysis"  
   ++ Profile.record ~accumulate:true "spill" Spill.fundecl
   ++ Profile.record ~accumulate:true "liveness" liveness

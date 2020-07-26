@@ -451,17 +451,12 @@ ENDFUNCTION(G(caml_allocN))
 
 FUNCTION(G(caml_call_poll))
         CFI_STARTPROC
-<<<<<<< HEAD
-LBL(caml_call_gc):
+LBL(caml_call_poll):
     /* Record lowest stack address and return address. */
         movq    (%rsp), %r11
         movq    %r11, Caml_state(last_return_address)
         leaq    8(%rsp), %r11
         movq    %r11, Caml_state(bottom_of_stack)
-=======
-        RECORD_STACK_FRAME(0)
-LBL(caml_call_poll):
->>>>>>> fc9a57c92... hacky hacky
     /* Touch the stack to trigger a recoverable segfault
        if insufficient space remains */
         subq    $(STACK_PROBE_SIZE), %rsp; CFI_ADJUST(STACK_PROBE_SIZE);

@@ -450,19 +450,17 @@ ENDFUNCTION(G(caml_allocN))
 /* Polling */
 FUNCTION(G(caml_call_poll))
         CFI_STARTPROC
-LBL(caml_call_poll):
+LBL(caml_call_gc):
     /* Record lowest stack address and return address. */
-        pushq   %rax; CFI_ADJUST (8);
-        movq    8(%rsp), %rax
-        movq    %rax, Caml_state(last_return_address)
-        leaq    16(%rsp), %rax
-        movq    %rax, Caml_state(bottom_of_stack)
+        movq    (%rsp), %r11
+        movq    %r11, Caml_state(last_return_address)
+        leaq    8(%rsp), %r11
+        movq    %r11, Caml_state(bottom_of_stack)
     /* Touch the stack to trigger a recoverable segfault
        if insufficient space remains */
         subq    $(STACK_PROBE_SIZE), %rsp; CFI_ADJUST(STACK_PROBE_SIZE);
-        movq    %rax, 0(%rsp)
+        movq    %r11, 0(%rsp)
         addq    $(STACK_PROBE_SIZE), %rsp; CFI_ADJUST(-STACK_PROBE_SIZE);
-        popq    %rax; CFI_ADJUST(-8);
     /* Build array of registers, save it into Caml_state->gc_regs */
 #ifdef WITH_FRAME_POINTERS
         ENTER_FUNCTION          ;
@@ -507,7 +505,7 @@ LBL(caml_call_poll):
         movsd   %xmm15, 15*8(%rsp)
     /* Call the garbage collector */
         PREPARE_FOR_C_CALL
-        call    GCALL(caml_garbage_collection)
+        call    GCALL(caml_poll)
         CLEANUP_AFTER_C_CALL
     /* Restore young_ptr */
         movq    Caml_state(young_ptr), %r15

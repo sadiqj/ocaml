@@ -1256,6 +1256,7 @@ method emit_fundecl f =
     self#insert_prologue f ~loc_arg ~rarg ~spacetime_node_hole ~env
   in
   let body = self#extract_core ~end_instr:body in
+  self#insert env (Iop(Ipoll)) [||] [||];
   instr_iter (fun instr -> self#mark_instr instr.Mach.desc) body;
   { fun_name = f.Cmm.fun_name;
     fun_args = loc_arg;

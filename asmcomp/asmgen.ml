@@ -78,6 +78,18 @@ let rec regalloc ~ppf_dump round fd =
 
 let (++) x f = f x
 
+let add_poll_before_fix_live (f : Mach.instruction) : Mach.instruction =
+  let append_reg (l : Reg.t list) (r : Reg.t) = match r.loc with | Reg _ -> (r :: l) | _ -> l in
+  let new_live = Reg.Set.union f.live (Reg.Set.of_list (Array.fold_left append_reg [] f.arg)) in
+  { desc = Iop(Ipoll);
+    next = f;
+    arg = Array.make 0 Reg.dummy;
+    res = Array.make 0 Reg.dummy;
+    dbg = f.dbg;
+    live = new_live;
+    available_before = f.available_before;
+    available_across = f.available_across }
+
 let add_poll_before (f : Mach.instruction) : Mach.instruction =
   { desc = Iop(Ipoll);
     next = f;
@@ -153,7 +165,7 @@ let rec add_polls_to_exit (rec_handlers : IntSet.t) (f : Mach.instruction) =
     { f with next = add_polls_to_exit rec_handlers f.next }
     
 let polling_funcdecl (i : Mach.fundecl): Mach.fundecl =
-  let f = add_poll_before i.fun_body in
+  let f = add_poll_before_fix_live i.fun_body in
     let rec_handlers = find_rec_handlers f in
       { i with fun_body = add_polls_to_exit rec_handlers f }
   

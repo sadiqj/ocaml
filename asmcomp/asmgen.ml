@@ -168,7 +168,6 @@ let polling_funcdecl (i : Mach.fundecl): Mach.fundecl =
   let f = add_poll_before_fix_live i.fun_body in
     let rec_handlers = find_rec_handlers f in
       { i with fun_body = add_polls_to_exit rec_handlers f }
-  
 
 let compile_fundecl ~ppf_dump fd_cmm =
   Proc.init ();

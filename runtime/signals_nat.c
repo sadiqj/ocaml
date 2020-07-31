@@ -92,8 +92,7 @@ void caml_garbage_collection(void)
 
 void caml_poll(void)
 {
-  Caml_state->requested_minor_gc = 1;
-  caml_gc_dispatch();
+  caml_gc_compaction();
 }
 
 DECLARE_SIGNAL_HANDLER(handle_signal)

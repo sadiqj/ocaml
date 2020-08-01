@@ -313,8 +313,7 @@ let emit_call_gc gc =
   if gc.is_poll then
     emit_call "caml_call_poll"
   else    
-    emit_call "caml_call_gc"
-  end;
+    emit_call "caml_call_gc";
   def_label gc.gc_frame;
   I.jmp (label gc.gc_return_lbl)
 
@@ -931,23 +930,20 @@ let emit_instr fallthrough i =
           I.jmp r11
       end
   | Lop(Ipoll) ->
-      I.xchg r11 r11;
       (*I.cmp (domain_field Domainstate.Domain_young_limit) r15;*)
       let gc_call_label = new_label () in  
       let label_after_gc = new_label () in
       let lbl_frame =
-        record_frame_label ?label:None i.live false Debuginfo.none
+        record_frame_label ?label:None i.live (Dbg_other i.dbg)
       in
       I.jmp (label gc_call_label);
       call_gc_sites :=
-        { gc_size = 0;
-          gc_lbl = gc_call_label;
+        { gc_lbl = gc_call_label;
           gc_return_lbl = label_after_gc;
           gc_frame = lbl_frame;
           gc_spacetime = None ;
           is_poll = true } :: !call_gc_sites;
       def_label label_after_gc;
-      I.xchg r11 r11;
       ()
 
 let rec emit_all fallthrough i =

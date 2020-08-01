@@ -37,6 +37,7 @@
 #include "caml/spacetime.h"
 #include "caml/memprof.h"
 #include "caml/finalise.h"
+#include "caml/gc_ctrl.h"
 
 #ifndef NSIG
 #define NSIG 64
@@ -92,7 +93,7 @@ void caml_garbage_collection(void)
 
 void caml_poll(void)
 {
-  caml_gc_compaction();
+  caml_gc_compaction(Val_unit);
 }
 
 DECLARE_SIGNAL_HANDLER(handle_signal)

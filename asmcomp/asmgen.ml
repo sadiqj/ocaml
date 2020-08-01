@@ -78,18 +78,48 @@ let rec regalloc ~ppf_dump round fd =
 
 let (++) x f = f x
 
-let polling_funcdecl (i : Mach.fundecl): Mach.fundecl =
-  let f = i.fun_body in
-  let new_instructions : Mach.instruction =
+let add_poll_before (f : Mach.instruction) : Mach.instruction =
   { desc = Iop(Ipoll);
     next = f;
-    arg = f.arg;
-    res = f.res;
+    arg = Array.make 0 Reg.dummy;
+    res = Array.make 0 Reg.dummy;
     dbg = f.dbg;
     live = f.live;
     available_before = f.available_before;
-    available_across = f.available_across } in
-  { i with fun_body = new_instructions }
+    available_across = f.available_across }
+
+(* and instruction_desc =
+    Iend
+  | Iop of operation
+  | Ireturn
+  | Iifthenelse of test * instruction * instruction
+  | Iswitch of int array * instruction array
+  | Icatch of Cmm.rec_flag * (int * instruction) list * instruction
+  | Iexit of int
+  | Itrywith of instruction * instruction
+  | Iraise of Lambda.raise_kind *)
+
+let rec add_polls_to_exit (f : Mach.instruction) =
+  match f.desc with
+  | Iifthenelse(test, i0, i1) ->
+    { f with desc = Iifthenelse(test, add_polls_to_exit i0, add_polls_to_exit i1); next = add_polls_to_exit f.next }
+  | Iswitch(index, cases) ->
+    { f with desc = Iswitch(index, Array.map add_polls_to_exit cases); next = add_polls_to_exit f.next }
+  | Icatch(rec_flag, handlers, body) ->
+    { f with desc = Icatch(rec_flag, List.map (fun (idx, instrs) -> (idx, add_polls_to_exit instrs)) handlers, add_polls_to_exit body); next = add_polls_to_exit f.next }
+  | Itrywith(body, handler) ->
+    { f with desc = Itrywith(add_polls_to_exit body, add_polls_to_exit handler); next = add_polls_to_exit f.next }
+  | Iexit(_) ->
+    let new_f = add_poll_before f in
+      { new_f with next = { f with next = add_polls_to_exit f.next } }
+  | Iend | Ireturn | Iop(Itailcall_ind _) | Iop(Itailcall_imm _) | Iraise _ ->
+    f    
+  | Iop(_) -> 
+    { f with next = add_polls_to_exit f.next }
+    
+let polling_funcdecl (i : Mach.fundecl): Mach.fundecl =
+  let f = add_poll_before i.fun_body in
+    { i with fun_body = add_polls_to_exit f }
   
 
 let compile_fundecl ~ppf_dump fd_cmm =
@@ -104,7 +134,9 @@ let compile_fundecl ~ppf_dump fd_cmm =
   ++ pass_dump_if ppf_dump dump_cse "After CSE"
   ++ Profile.record ~accumulate:true "liveness" liveness
   ++ Profile.record ~accumulate:true "deadcode" Deadcode.fundecl
-  ++ pass_dump_if ppf_dump dump_live "Liveness analysis"
+  ++ Profile.record ~accumulate:true "liveness" liveness
+  ++ Profile.record ~accumulate:true "polling" polling_funcdecl
+  ++ pass_dump_if ppf_dump dump_live "Liveness analysis"  
   ++ Profile.record ~accumulate:true "spill" Spill.fundecl
   ++ Profile.record ~accumulate:true "liveness" liveness
   ++ pass_dump_if ppf_dump dump_spill "After spilling"
@@ -112,7 +144,6 @@ let compile_fundecl ~ppf_dump fd_cmm =
   ++ pass_dump_if ppf_dump dump_split "After live range splitting"
   ++ Profile.record ~accumulate:true "liveness" liveness
   ++ Profile.record ~accumulate:true "regalloc" (regalloc ~ppf_dump 1)
-  ++ Profile.record ~accumulate:true "polling" polling_funcdecl
   ++ Profile.record ~accumulate:true "available_regs" Available_regs.fundecl
   ++ Profile.record ~accumulate:true "linearize" Linearize.fundecl
   ++ pass_dump_linear_if ppf_dump dump_linear "Linearized code"

@@ -932,13 +932,13 @@ let emit_instr fallthrough i =
       end
   | Lop(Ipoll) ->
       I.xchg r11 r11;
-      I.cmp (domain_field Domainstate.Domain_young_limit) r15;
+      (*I.cmp (domain_field Domainstate.Domain_young_limit) r15;*)
       let gc_call_label = new_label () in  
       let label_after_gc = new_label () in
       let lbl_frame =
         record_frame_label ?label:None i.live false Debuginfo.none
       in
-      I.jb (label gc_call_label);
+      I.jmp (label gc_call_label);
       call_gc_sites :=
         { gc_size = 0;
           gc_lbl = gc_call_label;

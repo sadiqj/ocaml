@@ -49,6 +49,9 @@ void caml_init_gc (uintnat minor_size, uintnat major_size, uintnat major_incr,
 
 CAMLextern value caml_gc_stat(value v);
 
+// FIXME: Remove this - only for testing
+CAMLextern value caml_gc_compaction (value v);
+
 #ifdef DEBUG
 void caml_heap_check (void);
 #endif

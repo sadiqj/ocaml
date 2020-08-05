@@ -298,6 +298,7 @@ void caml_oldify_local_roots (void)
           } else {
             root = (value *)(sp + ofs);
           }
+          
           Oldify (root);
         }
         /* Move to next frame */

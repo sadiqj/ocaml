@@ -468,6 +468,7 @@ LBL(caml_call_poll):
 #else
         pushq   %rbp; CFI_ADJUST(8);
 #endif
+        pushq   %r11; CFI_ADJUST (8);
         pushq   %r10; CFI_ADJUST (8);
         pushq   %r13; CFI_ADJUST (8);
         pushq   %r12; CFI_ADJUST (8);

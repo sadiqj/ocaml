@@ -298,11 +298,6 @@ void caml_oldify_local_roots (void)
           } else {
             root = (value *)(sp + ofs);
           }
-
-          // FIXME: Remove
-          if(!(!Is_block((value)root) || Is_in_heap_or_young((value)root))) {
-            abort();
-          }
           
           Oldify (root);
         }

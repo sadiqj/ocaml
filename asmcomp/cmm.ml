@@ -144,6 +144,7 @@ and operation =
         call (at the same place as any frame descriptor would reference). *)
   | Cload of memory_chunk * Asttypes.mutable_flag
   | Calloc
+  | Cpoll
   | Cstore of memory_chunk * Lambda.initialization_or_assignment
   | Caddi | Csubi | Cmuli | Cmulhi | Cdivi | Cmodi
   | Cand | Cor | Cxor | Clsl | Clsr | Casr

@@ -143,6 +143,8 @@ type primitive =
   | Pint_as_pointer
   (* Inhibition of optimisation *)
   | Popaque
+  (* Poll *)
+  | Ppoll
 
 and integer_comparison =
     Ceq | Cne | Clt | Cgt | Cle | Cge

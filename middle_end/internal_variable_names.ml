@@ -151,6 +151,7 @@ let pointer = "pointer"
 let popaque = "Popaque"
 let porbint = "Porbint"
 let porint = "Porint"
+let ppoll = "Ppoll"
 let praise = "Praise"
 let predef_exn = "predef_exn"
 let prevapply = "Prevapply"
@@ -252,6 +253,7 @@ let poffsetref_arg = "Poffsetref_arg"
 let popaque_arg = "Popaque_arg"
 let porbint_arg = "Porbint_arg"
 let porint_arg = "Porint_arg"
+let ppoll_arg = "Ppoll_arg"
 let praise_arg = "Praise_arg"
 let prevapply_arg = "Prevapply_arg"
 let psequand_arg = "Psequand_arg"
@@ -414,6 +416,7 @@ let of_primitive : Lambda.primitive -> string = function
   | Pbbswap _ -> pbbswap
   | Pint_as_pointer -> pint_as_pointer
   | Popaque -> popaque
+  | Ppoll -> ppoll
 
 let of_primitive_arg : Lambda.primitive -> string = function
   | Pidentity -> pidentity_arg
@@ -520,3 +523,4 @@ let of_primitive_arg : Lambda.primitive -> string = function
   | Pbbswap _ -> pbbswap_arg
   | Pint_as_pointer -> pint_as_pointer_arg
   | Popaque -> popaque_arg
+  | Ppoll -> ppoll_arg

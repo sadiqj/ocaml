@@ -67,7 +67,7 @@
    annot outcometree
 
    ;; lambda/
-   debuginfo lambda matching printlambda runtimedef simplif switch
+   debuginfo lambda lambda_polling matching printlambda runtimedef simplif switch
    translattribute translclass translcore translmod translobj translprim
 
    ;; bytecomp/

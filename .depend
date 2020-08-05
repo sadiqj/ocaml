@@ -3301,6 +3301,12 @@ lambda/lambda.cmi : \
     typing/env.cmi \
     lambda/debuginfo.cmi \
     parsing/asttypes.cmi
+lambda/lambda_polling.cmo : \
+    lambda/lambda_polling.cmi
+lambda/lambda_polling.cmx : \
+    lambda/lambda_polling.cmi
+lambda/lambda_polling.cmi : \
+    lambda/lambda.cmi
 lambda/matching.cmo : \
     typing/types.cmi \
     typing/typeopt.cmi \
@@ -5948,6 +5954,7 @@ driver/optcompile.cmo : \
     utils/profile.cmi \
     lambda/printlambda.cmi \
     utils/misc.cmi \
+    lambda/lambda_polling.cmi \
     lambda/lambda.cmi \
     middle_end/flambda/flambda_middle_end.cmi \
     utils/config.cmi \
@@ -5963,6 +5970,7 @@ driver/optcompile.cmx : \
     utils/profile.cmx \
     lambda/printlambda.cmx \
     utils/misc.cmx \
+    lambda/lambda_polling.cmx \
     lambda/lambda.cmx \
     middle_end/flambda/flambda_middle_end.cmx \
     utils/config.cmx \

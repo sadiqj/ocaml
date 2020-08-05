@@ -74,6 +74,7 @@ let oper_result_type = function
       | _ -> typ_int
       end
   | Calloc -> typ_val
+  | Cpoll -> typ_void
   | Cstore (_c, _) -> typ_void
   | Caddi | Csubi | Cmuli | Cmulhi | Cdivi | Cmodi |
     Cand | Cor | Cxor | Clsl | Clsr | Casr |
@@ -324,7 +325,7 @@ method is_simple_expr = function
   | Cop(op, args, _) ->
       begin match op with
         (* The following may have side effects *)
-      | Capply _ | Cextcall _ | Calloc | Cstore _ | Craise _ -> false
+      | Capply _ | Cextcall _ | Calloc | Cpoll | Cstore _ | Craise _ -> false
         (* The remaining operations are simple if their args are *)
       | Cload _ | Caddi | Csubi | Cmuli | Cmulhi | Cdivi | Cmodi | Cand | Cor
       | Cxor | Clsl | Clsr | Casr | Ccmpi _ | Caddv | Cadda | Ccmpa _ | Cnegf
@@ -364,7 +365,7 @@ method effects_of exp =
   | Cop (op, args, _) ->
     let from_op =
       match op with
-      | Capply _ | Cextcall _ -> EC.arbitrary
+      | Capply _ | Cpoll | Cextcall _ -> EC.arbitrary
       | Calloc -> EC.none
       | Cstore _ -> EC.effect_only Effect.Arbitrary
       | Craise _ | Ccheckbound -> EC.effect_only Effect.Raise
@@ -495,6 +496,7 @@ method select_operation op args _dbg =
   | (Cdivf, _) -> (Idivf, args)
   | (Cfloatofint, _) -> (Ifloatofint, args)
   | (Cintoffloat, _) -> (Iintoffloat, args)
+  | (Cpoll, _) -> Ipoll
   | (Ccheckbound, _) ->
     let extra_args = self#select_checkbound_extra_args () in
     let op = self#select_checkbound () in

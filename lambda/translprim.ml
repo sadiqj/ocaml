@@ -757,7 +757,7 @@ let lambda_primitive_needs_event_after = function
   | Pbytes_load_64 _ | Pbytes_set_16 _ | Pbytes_set_32 _ | Pbytes_set_64 _
   | Pbigstring_load_16 _ | Pbigstring_load_32 _ | Pbigstring_load_64 _
   | Pbigstring_set_16 _ | Pbigstring_set_32 _ | Pbigstring_set_64 _
-  | Pbbswap _ -> true
+  | Pbbswap _ | Ppoll -> true
 
   | Pidentity | Pbytes_to_string | Pbytes_of_string | Pignore | Psetglobal _
   | Pgetglobal _ | Pmakeblock _ | Pfield _ | Pfield_computed | Psetfield _

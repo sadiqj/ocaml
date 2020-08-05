@@ -47,6 +47,7 @@ let flambda i backend typed =
     ((module_ident, main_module_block_size), code)
     |>> print_if i.ppf_dump Clflags.dump_rawlambda Printlambda.lambda
     |>> Simplif.simplify_lambda
+    |>> Lambda_polling.add_polls
     |>> print_if i.ppf_dump Clflags.dump_lambda Printlambda.lambda
     |> (fun ((module_ident, main_module_block_size), code) ->
       let program : Lambda.program =
@@ -75,7 +76,8 @@ let clambda i backend typed =
   |> Profile.(record generate)
     (fun program ->
        let code = Simplif.simplify_lambda program.Lambda.code in
-       { program with Lambda.code }
+       let polled_code = Lambda_polling.add_polls code in
+       { program with Lambda.code = polled_code }
        |> print_if i.ppf_dump Clflags.dump_lambda Printlambda.program
        |> Asmgen.compile_implementation
             ~backend

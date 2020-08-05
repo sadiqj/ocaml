@@ -458,6 +458,7 @@ let rec transl env e =
           assert false
       | (Pmakeblock(tag, _mut, _kind), args) ->
           make_alloc dbg tag (List.map (transl env) args)
+      | (Ppoll, _) -> Cop(Cpoll, [], dbg)
       | (Pccall prim, args) ->
           transl_ccall env prim args dbg
       | (Pduparray (kind, _), [Uprim (Pmakearray (kind', _), args, _dbg)]) ->
@@ -847,7 +848,7 @@ and transl_prim_1 env p arg dbg =
     | Paddfloat | Psubfloat | Pmulfloat | Pdivfloat
     | Pstringrefu | Pstringrefs | Pbytesrefu | Pbytessetu
     | Pbytesrefs | Pbytessets | Pisout | Pread_symbol _
-    | Pmakeblock (_, _, _) | Psetfield (_, _, _) | Psetfield_computed (_, _)
+    | Pmakeblock (_, _, _) | Ppoll | Psetfield (_, _, _) | Psetfield_computed (_, _)
     | Psetfloatfield (_, _) | Pduprecord (_, _) | Pccall _ | Pdivint _
     | Pmodint _ | Pintcomp _ | Pfloatcomp _ | Pmakearray (_, _)
     | Pcompare_ints | Pcompare_floats | Pcompare_bints _
@@ -1028,7 +1029,7 @@ and transl_prim_2 env p arg1 arg2 dbg =
   | Pnot | Pnegint | Pintoffloat | Pfloatofint | Pnegfloat
   | Pabsfloat | Pstringlength | Pbyteslength | Pbytessetu | Pbytessets
   | Pisint | Pbswap16 | Pint_as_pointer | Popaque | Pread_symbol _
-  | Pmakeblock (_, _, _) | Pfield _ | Psetfield_computed (_, _) | Pfloatfield _
+  | Pmakeblock (_, _, _) | Ppoll | Pfield _ | Psetfield_computed (_, _) | Pfloatfield _
   | Pduprecord (_, _) | Pccall _ | Praise _ | Poffsetint _ | Poffsetref _
   | Pmakearray (_, _) | Pduparray (_, _) | Parraylength _ | Parraysetu _
   | Parraysets _ | Pbintofint _ | Pintofbint _ | Pcvtbint (_, _)
@@ -1081,17 +1082,18 @@ and transl_prim_3 env p arg1 arg2 arg3 dbg =
   | Pintoffloat | Pfloatofint | Pnegfloat | Pabsfloat | Paddfloat | Psubfloat
   | Pmulfloat | Pdivfloat | Pstringlength | Pstringrefu | Pstringrefs
   | Pbyteslength | Pbytesrefu | Pbytesrefs | Pisint | Pisout
-  | Pbswap16 | Pint_as_pointer | Popaque | Pread_symbol _ | Pmakeblock (_, _, _)
-  | Pfield _ | Psetfield (_, _, _) | Pfloatfield _ | Psetfloatfield (_, _)
-  | Pduprecord (_, _) | Pccall _ | Praise _ | Pdivint _ | Pmodint _ | Pintcomp _
-  | Pcompare_ints | Pcompare_floats | Pcompare_bints _
-  | Poffsetint _ | Poffsetref _ | Pfloatcomp _ | Pmakearray (_, _)
-  | Pduparray (_, _) | Parraylength _ | Parrayrefu _ | Parrayrefs _
-  | Pbintofint _ | Pintofbint _ | Pcvtbint (_, _) | Pnegbint _ | Paddbint _
-  | Psubbint _ | Pmulbint _ | Pdivbint _ | Pmodbint _ | Pandbint _ | Porbint _
-  | Pxorbint _ | Plslbint _ | Plsrbint _ | Pasrbint _ | Pbintcomp (_, _)
-  | Pbigarrayref (_, _, _, _) | Pbigarrayset (_, _, _, _) | Pbigarraydim _
-  | Pstring_load _ | Pbytes_load _ | Pbigstring_load _ | Pbbswap _
+  | Pbswap16 | Pint_as_pointer | Popaque | Pread_symbol _ | Pmakeblock (_, _, _) 
+  | Ppoll | Pfield _ | Psetfield (_, _, _) | Pfloatfield _ 
+  | Psetfloatfield (_, _) | Pduprecord (_, _) | Pccall _ | Praise _ 
+  | Pdivint _ | Pmodint _ | Pintcomp _ | Pcompare_ints | Pcompare_floats 
+  | Pcompare_bints _ | Poffsetint _ | Poffsetref _ | Pfloatcomp _ 
+  | Pmakearray (_, _) | Pduparray (_, _) | Parraylength _ | Parrayrefu _ 
+  | Parrayrefs _ | Pbintofint _ | Pintofbint _ | Pcvtbint (_, _) | Pnegbint _ 
+  | Paddbint _ | Psubbint _ | Pmulbint _ | Pdivbint _ | Pmodbint _ | Pandbint _ 
+  | Porbint _ | Pxorbint _ | Plslbint _ | Plsrbint _ | Pasrbint _ 
+  | Pbintcomp (_, _) | Pbigarrayref (_, _, _, _) 
+  | Pbigarrayset (_, _, _, _) | Pbigarraydim _ | Pstring_load _ | Pbytes_load _ 
+  | Pbigstring_load _ | Pbbswap _
     ->
       fatal_errorf "Cmmgen.transl_prim_3: %a"
         Printclambda_primitives.primitive p

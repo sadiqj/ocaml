@@ -404,6 +404,7 @@ static void mark_slice (intnat work)
 #endif
     }
     if (v != 0){
+      caml_gc_message(0x08, "marking 0x%lx\n", (value)v);
       hd = Hd_val(v);
       CAMLassert (Is_gray_hd (hd));
       size = Wosize_hd (hd);

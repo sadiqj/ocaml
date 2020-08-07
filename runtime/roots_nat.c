@@ -248,7 +248,7 @@ void caml_oldify_local_roots (void)
   frame_descr * d;
   uintnat h;
   intnat i, j;
-  int n, ofs;
+  int n, ofs, num_local_roots = 0;
   unsigned short * p;
   value * glob;
   value * root;
@@ -280,6 +280,9 @@ void caml_oldify_local_roots (void)
   sp = Caml_state->bottom_of_stack;
   retaddr = Caml_state->last_return_address;
   regs = Caml_state->gc_regs;
+
+  caml_gc_message(0x08, "last_return_address = %p\n", (char*)retaddr);
+
   if (sp != NULL) {
     while (1) {
       /* Find the descriptor corresponding to the return address */
@@ -289,6 +292,7 @@ void caml_oldify_local_roots (void)
         if (d->retaddr == retaddr) break;
         h = (h+1) & caml_frame_descriptors_mask;
       }
+      caml_gc_message(0x08, "frame %p size = %d\n", (char*)(d->retaddr), d->num_live);
       if (d->frame_size != 0xFFFF) {
         /* Scan the roots in this frame */
         for (p = d->live_ofs, n = d->num_live; n > 0; n--, p++) {
@@ -298,7 +302,30 @@ void caml_oldify_local_roots (void)
           } else {
             root = (value *)(sp + ofs);
           }
+
+          /* let int_reg_name =
+  [| RAX; RBX; RDI; RSI; RDX; RCX; R8; R9;
+     R12; R13; R10; R11; RBP; |] */
+          // FIXME: Remove me
+          if( ofs & 1 ) {
+            char reg_names[13][4] = {"rax", "rbx", "rdi", "rsi", "rdx", "rcx", "r8", "r9", "r12", "r13", "r10", "r11", "rbp"};
+
+            caml_gc_message(0x08, "root reg %s = %p\n", reg_names[ofs >> 1], (value*)*root);
+          } else {
+            caml_gc_message(0x08, "root stack %p\n", (value*)*root);
+          }
           
+          if( Is_block(*root) ) {
+            value block = *root;
+            unsigned char tag_val = Tag_val(block);
+            size_t sz = Wosize_val(block);
+            caml_gc_message(0x08, "\tblock: sz: %ld, tag: %d\n", sz, tag_val);
+          } else {
+            caml_gc_message(0x08, "\timmediate: %lu\n", Long_val(*root));
+          }
+          
+          num_local_roots++;
+
           Oldify (root);
         }
         /* Move to next frame */
@@ -322,6 +349,9 @@ void caml_oldify_local_roots (void)
       }
     }
   }
+
+  caml_gc_message(0x08, "local roots = %d\n", num_local_roots);
+
   /* Local C roots */
   for (lr = Caml_state->local_roots; lr != NULL; lr = lr->next) {
     for (i = 0; i < lr->ntables; i++){

@@ -3302,8 +3302,12 @@ lambda/lambda.cmi : \
     lambda/debuginfo.cmi \
     parsing/asttypes.cmi
 lambda/lambda_polling.cmo : \
+    lambda/lambda.cmi \
+    lambda/debuginfo.cmi \
     lambda/lambda_polling.cmi
 lambda/lambda_polling.cmx : \
+    lambda/lambda.cmx \
+    lambda/debuginfo.cmx \
     lambda/lambda_polling.cmi
 lambda/lambda_polling.cmi : \
     lambda/lambda.cmi

@@ -93,6 +93,7 @@ void caml_garbage_collection(void)
 
 void caml_poll(void)
 {
+  caml_gc_message(0x08, "poll called\n");
   caml_gc_compaction(Val_unit);
 }
 

@@ -198,6 +198,7 @@ void caml_oldify_one (value v, value *p)
 
  tail_call:
   if (Is_block (v) && Is_young (v)){
+    caml_gc_message(0x08, "promoting 0x%lx\n", (value)v);
     CAMLassert ((value *) Hp_val (v) >= Caml_state->young_ptr);
     hd = Hd_val (v);
     if (hd == 0){         /* If already forwarded */

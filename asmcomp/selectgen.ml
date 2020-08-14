@@ -409,7 +409,7 @@ method mark_instr = function
   | Iop (Itailcall_ind _ | Itailcall_imm _) ->
       self#mark_tailcall
   | Iop (Ialloc _) | Iop (Ipoll) ->
-      self#mark_call (* caml_alloc*, caml_garbage_collection *)
+      self#mark_call (* caml_alloc*, caml_poll, caml_garbage_collection *)
   | Iop (Iintop (Icheckbound _) | Iintop_imm(Icheckbound _, _)) ->
       self#mark_c_tailcall (* caml_ml_array_bound_error *)
   | Iraise raise_kind ->
@@ -1255,7 +1255,6 @@ method emit_fundecl f =
   let fun_spacetime_shape =
     self#insert_prologue f ~loc_arg ~rarg ~spacetime_node_hole ~env
   in
-  self#insert env (Iop(Ipoll)) [||] [||];
   let body = self#extract_core ~end_instr:body in
   self#insert env (Iop(Ipoll)) [||] [||];
   instr_iter (fun instr -> self#mark_instr instr.Mach.desc) body;

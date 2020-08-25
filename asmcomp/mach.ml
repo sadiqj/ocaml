@@ -141,6 +141,26 @@ let instr_cons_debug d a r dbg n =
     available_across = None;
   }
 
+let forward initial combine func instr =
+  let rec reduce acc i =
+    let new_acc = func acc i in
+      match i.desc with
+    | Iend | Ireturn | Iop(Itailcall_ind _) | Iop(Itailcall_imm _) -> new_acc
+    | Iifthenelse(_tst, ifso, ifnot) ->
+        let branches_acc = combine [reduce new_acc ifso; reduce new_acc ifnot] in
+          reduce branches_acc i.next
+    | Iswitch(_index, cases) ->
+        let cases_acc = combine (Array.(map (fun case -> reduce new_acc case) cases |> to_list)) in
+          reduce cases_acc i.next
+    | Icatch(_, handlers, body) ->
+        let body_acc = reduce new_acc body in
+        let handlers_acc = combine (List.map (fun (_n, handler) -> reduce body_acc handler) handlers) in
+          reduce handlers_acc i.next
+    | Itrywith(body, handler) ->
+        reduce (combine [reduce new_acc body; reduce new_acc handler]) i.next
+    | _ -> reduce new_acc i.next
+  in reduce initial instr
+
 let rec instr_iter f i =
   match i.desc with
     Iend -> ()

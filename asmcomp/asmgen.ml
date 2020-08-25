@@ -78,6 +78,19 @@ let rec regalloc ~ppf_dump round fd =
 
 let (++) x f = f x
 
+let escape_fundecl ppf_dump (fun_decl : Mach.fundecl) =
+  (* forward initial combine func instr *)
+  let initial = 0 in
+  let combine l =
+    List.fold_left (fun a b -> a+b) 0 l in
+  let func allocs (i : Mach.instruction) =
+    match i.desc with
+    | Iop(Ialloc _) -> (allocs+1)
+    | _ -> allocs in
+  let total_allocs = Mach.forward initial combine func fun_decl.fun_body in
+    fprintf ppf_dump "%s: %d\n" fun_decl.fun_name total_allocs;
+    fun_decl
+    
 let compile_fundecl ~ppf_dump fd_cmm =
   Proc.init ();
   Reg.reset();
@@ -90,6 +103,7 @@ let compile_fundecl ~ppf_dump fd_cmm =
   ++ pass_dump_if ppf_dump dump_cse "After CSE"
   ++ Profile.record ~accumulate:true "liveness" liveness
   ++ Profile.record ~accumulate:true "deadcode" Deadcode.fundecl
+  ++ Profile.record ~accumulate:true "escape" (escape_fundecl ppf_dump)
   ++ pass_dump_if ppf_dump dump_live "Liveness analysis"
   ++ Profile.record ~accumulate:true "spill" Spill.fundecl
   ++ Profile.record ~accumulate:true "liveness" liveness

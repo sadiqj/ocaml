@@ -136,6 +136,9 @@ val instr_cons:
 val instr_cons_debug:
       instruction_desc -> Reg.t array -> Reg.t array -> Debuginfo.t ->
         instruction -> instruction
+
+val forward: 'a -> ('a list -> 'a) -> ('a -> instruction -> 'a) -> instruction -> 'a
+
 val instr_iter: (instruction -> unit) -> instruction -> unit
 
 val spacetime_node_hole_pointer_is_live_before : instruction -> bool

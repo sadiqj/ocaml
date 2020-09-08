@@ -234,7 +234,7 @@ Caml_inline void mark_stack_push(struct mark_stack* stk, value block,
   }
 #endif
 
-  end = (block_wsz < 16 ? block_wsz : 16);
+  end = (block_wsz < 32 ? block_wsz : 32);
 
   /* Optimisation to avoid pushing small, unmarkable objects such as [Some 42]
    * into the mark stack. */

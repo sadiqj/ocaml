@@ -950,7 +950,7 @@ let emit_instr fallthrough i =
           I.jmp r11
       end
   | Lop(Ipoll) ->
-      let gc_call_label = new_label () in  
+      (*let gc_call_label = new_label () in  
       let label_after_gc = new_label () in
       let lbl_frame =
         record_frame_label ?label:None i.live (Dbg_other i.dbg)
@@ -962,7 +962,7 @@ let emit_instr fallthrough i =
           gc_frame = lbl_frame;
           gc_spacetime = None ;
           is_poll = true } :: !call_gc_sites;
-      def_label label_after_gc;
+      def_label label_after_gc;*)
       ()
 
 let rec emit_all fallthrough i =

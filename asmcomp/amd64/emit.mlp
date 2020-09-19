@@ -950,6 +950,7 @@ let emit_instr fallthrough i =
           I.jmp r11
       end
   | Lop(Ipoll) ->
+      I.cmp (domain_field Domainstate.Domain_young_limit) r15;
       let gc_call_label = new_label () in  
       let label_after_gc = new_label () in
       let lbl_frame =

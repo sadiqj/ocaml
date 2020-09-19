@@ -950,7 +950,11 @@ let emit_instr fallthrough i =
           I.jmp r11
       end
   | Lop(Ipoll) ->
-      (*let gc_call_label = new_label () in  
+      I.cmp (domain_field Domainstate.Domain_young_limit) r15;
+      I.nop ();
+      I.nop ();
+      (*
+      let gc_call_label = new_label () in  
       let label_after_gc = new_label () in
       let lbl_frame =
         record_frame_label ?label:None i.live (Dbg_other i.dbg)

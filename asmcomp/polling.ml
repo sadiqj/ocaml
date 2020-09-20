@@ -172,7 +172,7 @@ let rec find_rec_handlers (f : Mach.instruction) =
                 let current_rec_handlers = if not (allocates_unconditionally handler) then
                   let handler_size = handler_body_size handler in
                   let handler_calls_or_loops = contains_calls_or_loops handler in
-                  if handler_size < max_mach_ops_between_polls/2 && not(handler_calls_or_loops) then
+                  if handler_size < max_mach_ops_between_polls/2 && not(handler_calls_or_loops) && false then
                     let iterations_per_poll = max_mach_ops_between_polls / handler_size in
                       [(id, ConditionalPoll(iterations_per_poll, Reg.create Int))]
                   else

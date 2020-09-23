@@ -78,16 +78,34 @@ let rec regalloc ~ppf_dump round fd =
 
 let (++) x f = f x
 
-let alloc_forward (allocs : Reg.Set.t) (i : Mach.instruction) =
+type escaped_state = Escapes | NoEscape
+
+type allocs_state = { pointers: (Reg.t * int) list; alloc_escape: (int * escaped_state) list }
+
+let allocs_idx = ref 0
+
+let alloc_forward (allocs : allocs_state) (i : Mach.instruction) =
   match i.desc with
-  | Iop(Ialloc _) -> (Reg.Set.add i.res.(0) allocs)
+  | Iop(Ialloc _) -> 
+    let new_alloc = !allocs_idx in
+      incr allocs_idx;
+     { allocs with  pointers = ((i.res.(0), new_alloc) :: allocs.pointers); 
+                    alloc_escape = ((new_alloc, NoEscape) :: allocs.alloc_escape) }
+  | Iop(Istore _) ->
+    allocs 
   | _ -> allocs
+
+let agg_allocs agg a =
+  let pointers = agg.pointers @ a.pointers in
+  let alloc_escape = agg.alloc_escape @ a.alloc_escape in
+  { pointers; alloc_escape }
+
+let combine l =
+  List.fold_left agg_allocs { pointers = []; alloc_escape = [] } l
 
 let escape_fundecl ppf_dump (fun_decl : Mach.fundecl) =
   (* forward initial combine func instr *)
-  let initial = Reg.Set.empty in
-  let combine l =
-    List.fold_left (fun a b -> Reg.Set.union a b) Reg.Set.empty l in
+  let initial = { pointers = []; alloc_escape = [] } in
   let total_allocs = Mach.forward initial combine alloc_forward fun_decl.fun_body in
     if Reg.Set.cardinal total_allocs > 0 then
     fprintf ppf_dump "%s: %d\n" fun_decl.fun_name (Reg.Set.cardinal total_allocs);

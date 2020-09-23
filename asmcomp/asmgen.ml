@@ -78,17 +78,19 @@ let rec regalloc ~ppf_dump round fd =
 
 let (++) x f = f x
 
+let alloc_forward (allocs : Reg.Set.t) (i : Mach.instruction) =
+  match i.desc with
+  | Iop(Ialloc _) -> (Reg.Set.add i.res.(0) allocs)
+  | _ -> allocs
+
 let escape_fundecl ppf_dump (fun_decl : Mach.fundecl) =
   (* forward initial combine func instr *)
-  let initial = 0 in
+  let initial = Reg.Set.empty in
   let combine l =
-    List.fold_left (fun a b -> a+b) 0 l in
-  let func allocs (i : Mach.instruction) =
-    match i.desc with
-    | Iop(Ialloc _) -> (allocs+1)
-    | _ -> allocs in
-  let total_allocs = Mach.forward initial combine func fun_decl.fun_body in
-    fprintf ppf_dump "%s: %d\n" fun_decl.fun_name total_allocs;
+    List.fold_left (fun a b -> Reg.Set.union a b) Reg.Set.empty l in
+  let total_allocs = Mach.forward initial combine alloc_forward fun_decl.fun_body in
+    if Reg.Set.cardinal total_allocs > 0 then
+    fprintf ppf_dump "%s: %d\n" fun_decl.fun_name (Reg.Set.cardinal total_allocs);
     fun_decl
     
 let compile_fundecl ~ppf_dump fd_cmm =
@@ -97,8 +99,6 @@ let compile_fundecl ~ppf_dump fd_cmm =
   fd_cmm
   ++ Profile.record ~accumulate:true "selection" Selection.fundecl
   ++ pass_dump_if ppf_dump dump_selection "After instruction selection"
-  ++ Profile.record ~accumulate:true "comballoc" Comballoc.fundecl
-  ++ pass_dump_if ppf_dump dump_combine "After allocation combining"
   ++ Profile.record ~accumulate:true "cse" CSE.fundecl
   ++ pass_dump_if ppf_dump dump_cse "After CSE"
   ++ Profile.record ~accumulate:true "liveness" liveness

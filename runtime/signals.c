@@ -76,7 +76,7 @@ FILE* log_file = NULL;
 
 void flush_poll_log() {
   fwrite(&ts_buffer_len, sizeof(uint64_t), 1, log_file);
-  fwrite(&ts_buffer, sizeof(uint64_t), ts_buffer_len, log_file);
+  fwrite(ts_buffer, sizeof(uint64_t), ts_buffer_len, log_file);
 }
 
 void close_poll_log() {

@@ -2609,12 +2609,12 @@ asmcomp/mach.cmi : \
     middle_end/backend_var.cmi \
     asmcomp/arch.cmo
 asmcomp/polling.cmo : \
-    asmcomp/reg.cmi \
     asmcomp/mach.cmi \
+    asmcomp/cmm.cmi \
     asmcomp/polling.cmi
 asmcomp/polling.cmx : \
-    asmcomp/reg.cmx \
     asmcomp/mach.cmx \
+    asmcomp/cmm.cmx \
     asmcomp/polling.cmi
 asmcomp/polling.cmi : \
     asmcomp/mach.cmi

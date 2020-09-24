@@ -43,6 +43,8 @@ CAMLextern value caml_process_pending_actions_exn (void);
 /* Same as [caml_process_pending_actions], but returns the exception
    if any (otherwise returns [Val_unit]). */
 
+CAMLextern void caml_log_poll();
+
 #ifdef CAML_INTERNALS
 CAMLextern intnat volatile caml_pending_signals[];
 

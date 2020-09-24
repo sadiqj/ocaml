@@ -62,6 +62,49 @@ CAMLexport int (*caml_sigmask_hook)(int, const sigset_t *, sigset_t *)
   = sigprocmask_wrapper;
 #endif
 
+uint64_t rdtsc()
+{
+   uint32_t hi, lo;
+   __asm__ __volatile__ ("rdtsc" : "=a"(lo), "=d"(hi));
+   return ( (uint64_t)lo)|( ((uint64_t)hi)<<32 );
+}
+
+#define TS_BUFFER_SIZE 32000000
+uint64_t* ts_buffer = NULL;
+uint64_t ts_buffer_len = 0;
+FILE* log_file = NULL;
+
+void flush_poll_log() {
+  fwrite(&ts_buffer_len, sizeof(uint64_t), 1, log_file);
+  fwrite(&ts_buffer, sizeof(uint64_t), ts_buffer_len, log_file);
+}
+
+void close_poll_log() {
+  flush_poll_log();
+  fclose(log_file);
+}
+
+void caml_log_poll() {
+  uint64_t ts = rdtsc();
+
+  if( ts_buffer == NULL ) {
+    ts_buffer = (uint64_t*)malloc(TS_BUFFER_SIZE * sizeof(uint64_t));
+    ts_buffer_len = 0;
+
+    log_file = fopen("./polls.log", "w");
+
+    atexit(close_poll_log);
+  }
+
+  if( ts_buffer_len == TS_BUFFER_SIZE-1 ) {
+    flush_poll_log();
+
+    ts_buffer_len = 0;
+  }
+
+  ts_buffer[ts_buffer_len++] = ts;
+}
+
 /* Execute all pending signals */
 
 value caml_process_pending_signals_exn(void)

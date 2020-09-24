@@ -780,6 +780,8 @@ method emit_expr (env:environment) exp =
               self#insert_move_results env loc_res rd stack_ofs;
               Some rd
           | Ialloc { bytes = _; spacetime_index; label_after_call_gc; } ->
+              let extcall_lbl = Cmm.new_label () in
+              self#insert_debug env (Iop(Iextcall {func = "caml_log_poll"; alloc = true; label_after = extcall_lbl})) dbg [||] [||];
               let rd = self#regs_for typ_val in
               let bytes = size_expr env (Ctuple new_args) in
               assert (bytes mod Arch.size_addr = 0);
@@ -1275,7 +1277,11 @@ method emit_fundecl f =
     self#insert_prologue f ~loc_arg ~rarg ~spacetime_node_hole ~env
   in
   if not(Polling.allocates_unconditionally body || Polling.is_leaf_func_without_loops body) then
-    self#insert env (Iop(Ipollcall { check_young_limit = true })) [||] [||];
+    begin
+      let extcall_lbl = Cmm.new_label () in
+      self#insert env (Iop(Iextcall {func = "caml_log_poll"; alloc = true; label_after = extcall_lbl})) [||] [||];  
+      self#insert env (Iop(Ipollcall { check_young_limit = true })) [||] [||]
+    end;
   let body = self#extract_core ~end_instr:body in
   instr_iter (fun instr -> self#mark_instr instr.Mach.desc) body;
   { fun_name = f.Cmm.fun_name;

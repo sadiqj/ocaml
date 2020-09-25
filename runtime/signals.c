@@ -72,6 +72,7 @@ uint64_t rdtsc()
 #define TS_BUFFER_SIZE 32000000
 uint64_t* ts_buffer = NULL;
 uint64_t ts_buffer_len = 0;
+uint64_t ts_sub_counter = 0;
 FILE* log_file = NULL;
 
 void flush_poll_log() {
@@ -99,13 +100,18 @@ void caml_log_poll() {
       atexit(close_poll_log);
     }
 
-    if( ts_buffer_len == TS_BUFFER_SIZE-1 ) {
+    if( ts_buffer_len == TS_BUFFER_SIZE ) {
       flush_poll_log();
 
       ts_buffer_len = 0;
     }
 
-    ts_buffer[ts_buffer_len++] = ts;
+    ts_sub_counter++;
+
+    if( ts_sub_counter == 100 ) {
+      ts_buffer[ts_buffer_len++] = ts;
+      ts_sub_counter = 0;
+    }
   }
 }
 

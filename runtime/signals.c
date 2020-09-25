@@ -80,29 +80,33 @@ void flush_poll_log() {
 }
 
 void close_poll_log() {
-  flush_poll_log();
-  fclose(log_file);
+  if( (caml_verb_gc & 0x400) && log_file != NULL ) {
+    flush_poll_log();
+    fclose(log_file);
+  }
 }
 
 void caml_log_poll() {
-  uint64_t ts = rdtsc();
+  if( caml_verb_gc & 0x400 ) {
+    uint64_t ts = rdtsc();
 
-  if( ts_buffer == NULL ) {
-    ts_buffer = (uint64_t*)malloc(TS_BUFFER_SIZE * sizeof(uint64_t));
-    ts_buffer_len = 0;
+    if( ts_buffer == NULL ) {
+      ts_buffer = (uint64_t*)malloc(TS_BUFFER_SIZE * sizeof(uint64_t));
+      ts_buffer_len = 0;
 
-    log_file = fopen("./polls.log", "w");
+      log_file = fopen("./polls.log", "w");
 
-    atexit(close_poll_log);
+      atexit(close_poll_log);
+    }
+
+    if( ts_buffer_len == TS_BUFFER_SIZE-1 ) {
+      flush_poll_log();
+
+      ts_buffer_len = 0;
+    }
+
+    ts_buffer[ts_buffer_len++] = ts;
   }
-
-  if( ts_buffer_len == TS_BUFFER_SIZE-1 ) {
-    flush_poll_log();
-
-    ts_buffer_len = 0;
-  }
-
-  ts_buffer[ts_buffer_len++] = ts;
 }
 
 /* Execute all pending signals */
@@ -210,6 +214,8 @@ CAMLexport int (*caml_try_leave_blocking_section_hook)(void) =
 CAMLno_tsan /* The read of [caml_something_to_do] is not synchronized. */
 CAMLexport void caml_enter_blocking_section(void)
 {
+  caml_log_poll();
+
   while (1){
     /* Process all pending signals now */
     caml_raise_if_exception(caml_process_pending_signals_exn());
@@ -226,6 +232,9 @@ CAMLexport void caml_leave_blocking_section(void)
   int saved_errno;
   /* Save the value of errno (PR#5982). */
   saved_errno = errno;
+
+  caml_log_poll();
+
   caml_leave_blocking_section_hook ();
 
   /* Some other thread may have switched

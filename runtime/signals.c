@@ -121,7 +121,7 @@ void caml_log_poll() {
         ts_sub_counter = 0;
       }
 
-      if( diff_ts > 100000 ) {
+      if( diff_ts > 1000000 ) {
         __asm__ volatile("int $0x03");
       }
 

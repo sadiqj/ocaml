@@ -73,6 +73,7 @@ uint64_t rdtsc()
 uint64_t* ts_buffer = NULL;
 uint64_t ts_buffer_len = 0;
 uint64_t ts_sub_counter = 0;
+uint64_t ts_last = 0;
 FILE* log_file = NULL;
 
 void flush_poll_log() {
@@ -85,6 +86,10 @@ void close_poll_log() {
     flush_poll_log();
     fclose(log_file);
   }
+}
+
+void caml_reset_log_poll() {
+  ts_last = 0;
 }
 
 void caml_log_poll() {
@@ -106,11 +111,25 @@ void caml_log_poll() {
       ts_buffer_len = 0;
     }
 
-    ts_sub_counter++;
+    if( ts_last > 0 ) {
+      uint64_t diff_ts = ts - ts_last;
 
-    if( ts_sub_counter == 100 ) {
-      ts_buffer[ts_buffer_len++] = ts;
-      ts_sub_counter = 0;
+      ts_sub_counter++;
+
+      if( ts_sub_counter == 100 ) {
+        ts_buffer[ts_buffer_len++] = diff_ts;
+        ts_sub_counter = 0;
+      }
+
+      if( diff_ts > 100000 ) {
+        __asm__ volatile("int $0x03");
+      }
+
+      ts_last = ts;
+    }
+    else
+    {
+      ts_last = ts;
     }
   }
 }
@@ -221,7 +240,6 @@ CAMLno_tsan /* The read of [caml_something_to_do] is not synchronized. */
 CAMLexport void caml_enter_blocking_section(void)
 {
   caml_log_poll();
-
   while (1){
     /* Process all pending signals now */
     caml_raise_if_exception(caml_process_pending_signals_exn());
@@ -239,7 +257,7 @@ CAMLexport void caml_leave_blocking_section(void)
   /* Save the value of errno (PR#5982). */
   saved_errno = errno;
 
-  caml_log_poll();
+  caml_reset_log_poll();
 
   caml_leave_blocking_section_hook ();
 

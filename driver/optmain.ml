@@ -38,6 +38,7 @@ let usage = "Usage: ocamlopt <options> <files>\nOptions are:"
 
 module Options = Main_args.Make_optcomp_options (Main_args.Default.Optmain)
 let main () =
+  Random.self_init ();
   native_code := true;
   let ppf = Format.err_formatter in
   try

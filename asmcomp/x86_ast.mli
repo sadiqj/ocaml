@@ -165,7 +165,7 @@ type instruction =
   | MOVZX of arg * arg
   | MULSD of arg * arg
   | NEG of arg
-  | NOP
+  | NOP of int
   | OR of arg * arg
   | POP of arg
   | PUSH of arg

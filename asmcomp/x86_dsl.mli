@@ -172,7 +172,7 @@ module I : sig
   val movsxd: arg -> arg -> unit
   val movzx: arg -> arg -> unit
   val mulsd: arg -> arg -> unit
-  val nop: unit -> unit
+  val nop: int -> unit
   val or_: arg -> arg -> unit
   val pop: arg -> unit
   val push: arg -> unit

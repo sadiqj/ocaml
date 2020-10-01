@@ -192,7 +192,10 @@ let print_instr b = function
   | MOVZX (arg1, arg2) -> i2 b "movzx" arg1 arg2
   | MULSD (arg1, arg2) -> i2 b "mulsd" arg1 arg2
   | NEG arg -> i1 b "neg" arg
-  | NOP -> i0 b "nop"
+  | NOP sz -> 
+    for _ = 0 to sz do
+      i0 b "nop"
+    done
   | OR (arg1, arg2) -> i2 b "or" arg1 arg2
   | POP arg -> i1 b "pop" arg
   | PUSH arg -> i1 b "push" arg

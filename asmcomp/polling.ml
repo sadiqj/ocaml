@@ -82,8 +82,8 @@ and check_path (f : Mach.instruction) : allocation_result =
 
 (* this determines whether from a given instruction we unconditionally
    allocate and this is used to avoid adding polls unnecessarily *)
-let allocates_unconditionally (i : Mach.instruction) =
-  match check_path i with Allocation -> true | NoAllocation | Exited -> false
+let allocates_unconditionally (i : Mach.instruction) = false
+  (*match check_path i with Allocation -> true | NoAllocation | Exited -> false*)
 
 let rec contains_calls_or_loops (i : Mach.instruction) =
   match i.desc with

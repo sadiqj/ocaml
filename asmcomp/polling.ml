@@ -19,36 +19,8 @@ let add_checked_poll_before do_young_limit_check (f : Mach.instruction) : Mach.i
 let allocates_unconditionally (_ : Mach.instruction) = false
   (*match check_path i with Allocation -> true | NoAllocation | Exited -> false*)
 
-let rec contains_calls_or_loops (i : Mach.instruction) =
-  match i.desc with
-  | Iifthenelse (_, ifso, ifnot) ->
-      contains_calls_or_loops ifso
-      || contains_calls_or_loops ifnot
-      || contains_calls_or_loops i.next
-  | Iswitch (_, cases) ->
-      Array.exists (fun c -> contains_calls_or_loops c) cases
-      || contains_calls_or_loops i.next
-  | Icatch (rec_flag, handlers, body) -> (
-      match rec_flag with
-      | Recursive -> true
-      | Nonrecursive ->
-          List.exists (fun (_, h) -> contains_calls_or_loops h) handlers
-          || contains_calls_or_loops body
-          || contains_calls_or_loops i.next )
-  | Itrywith (body, handler) ->
-      contains_calls_or_loops body
-      || contains_calls_or_loops handler
-      || contains_calls_or_loops i.next
-  | Iend -> false
-  | Iop
-      ( Iextcall _ | Icall_ind _ | Icall_imm _ | Itailcall_imm _
-      | Itailcall_ind _ ) ->
-      true
-  | Ireturn | Iexit _ | Iraise _ -> false
-  | Iop _ -> contains_calls_or_loops i.next
-
-let is_leaf_func_without_loops (fun_body : Mach.instruction) =
-  not (contains_calls_or_loops fun_body)
+let is_leaf_func_without_loops (_ : Mach.instruction) =
+  false
 
 (* finds_rec_handlers *)
 let rec find_rec_handlers (f : Mach.instruction) =

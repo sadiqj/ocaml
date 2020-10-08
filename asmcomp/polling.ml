@@ -14,75 +14,9 @@ let add_checked_poll_before do_young_limit_check (f : Mach.instruction) : Mach.i
     Mach.instr_cons
       (Iop (Ipollcall { check_young_limit = do_young_limit_check }))
       [||] [||] f
-
-type allocation_result = Allocation | NoAllocation | Exited
-
-let combine_paths p0 p1 =
-  match (p0, p1) with
-  | Allocation, Allocation -> Allocation
-  | Exited, _ | _, Exited -> Exited
-  | NoAllocation, _ | _, NoAllocation -> NoAllocation
-
-let rec reduce_paths_array arr =
-  let rec red_arr acc arr n =
-    match n with
-    | 0 -> acc
-    | _ ->
-        let curr_path = check_path arr.(n) in
-        let new_acc =
-          match acc with
-          | None -> curr_path
-          | Some v -> combine_paths v curr_path
-        in
-        red_arr (Some new_acc) arr (n - 1)
-  in
-  let res = red_arr None arr (Array.length arr - 1) in
-  match res with None -> NoAllocation | Some v -> v
-
-and reduce_paths_list l =
-  let rec red_list acc l =
-    match l with
-    | [] -> acc
-    | h :: tl ->
-        let curr_path = check_path h in
-        let new_acc =
-          match acc with
-          | None -> curr_path
-          | Some v -> combine_paths v curr_path
-        in
-        red_list (Some new_acc) tl
-  in
-  let res = red_list None l in
-  match res with None -> NoAllocation | Some v -> v
-
-and check_path (f : Mach.instruction) : allocation_result =
-  match f.desc with
-  | Iifthenelse (_, i0, i1) -> (
-      match combine_paths (check_path i0) (check_path i1) with
-      | NoAllocation -> check_path f.next
-      | pv -> pv )
-  | Iswitch (_, cases) -> (
-      let case_state = reduce_paths_array cases in
-      match case_state with NoAllocation -> check_path f.next | pv -> pv )
-  | Icatch (_, handlers, body) -> (
-      let handlers_state =
-        reduce_paths_list (List.map (fun (_, h) -> h) handlers)
-      in
-      match combine_paths handlers_state (check_path body) with
-      | NoAllocation -> check_path f.next
-      | pv -> pv )
-  | Itrywith (body, handler) -> (
-      match combine_paths (check_path body) (check_path handler) with
-      | NoAllocation -> check_path f.next
-      | pv -> pv )
-  | Ireturn | Iop (Itailcall_ind _) | Iop (Itailcall_imm _) | Iraise _ -> Exited
-  | Iend | Iexit _ -> NoAllocation
-  | Iop (Ialloc _) -> Allocation
-  | Iop _ -> check_path f.next
-
 (* this determines whether from a given instruction we unconditionally
    allocate and this is used to avoid adding polls unnecessarily *)
-let allocates_unconditionally (i : Mach.instruction) = false
+let allocates_unconditionally (_ : Mach.instruction) = false
   (*match check_path i with Allocation -> true | NoAllocation | Exited -> false*)
 
 let rec contains_calls_or_loops (i : Mach.instruction) =

@@ -121,7 +121,7 @@ if "%PORT%" equ "msvc64" (
 rem Do the main build (either msvc64 or mingw32)
 "%CYG_ROOT%\bin\bash.exe" -lc "$APPVEYOR_BUILD_FOLDER/tools/ci/appveyor/appveyor_build.sh" || exit /b 1
 
-if "%PORT%" neq "msvc64" goto :EOF
+goto :EOF
 
 rem Reconfigure the environment and run the msvc32 partial build
 endlocal

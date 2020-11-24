@@ -103,9 +103,10 @@ and check_path (f : Mach.instruction) : allocation_result =
       match combine_paths (check_path body) (check_path handler) with
       | NoAllocation -> check_path f.next
       | pv -> pv )
-  | Ireturn | Iop (Itailcall_ind _) | Iop (Itailcall_imm _) | Iraise _ -> Exited
+  | Ireturn | Iop (Itailcall_ind _) | Iop (Itailcall_imm _) -> Exited
   | Iend | Iexit _ -> NoAllocation
-  | Iop (Ialloc _) -> Allocation
+  | Iop (Ialloc _) | Iraise _ -> Allocation (* Iraise included here because
+                                                it has a poll inserted *)
   | Iop _ -> check_path f.next
 
 (* This determines whether from a given instruction we unconditionally

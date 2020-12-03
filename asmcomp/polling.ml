@@ -33,17 +33,17 @@ let add_checked_poll_before check_young_limit (f : Mach.instruction) : Mach.inst
       [||] [||] f
 
 (* The result of a sequence of instructions *)
-type allocation_result = Allocation | NoAllocation | Exited
+type path_result = WillPoll | NoPoll | Exited
 
 (* The combined result of two sequences of instructions *)
 let combine_paths p0 p1 =
   match (p0, p1) with
-  (* both paths allocate, might not need to poll *)
-  | Allocation, Allocation -> Allocation
-  (* one path exits without allocating *)
+  (* both paths will poll, might not need to poll *)
+  | WillPoll, WillPoll -> WillPoll
+  (* one path exits without polling *)
   | Exited, _ | _, Exited -> Exited
-  (* no allocation happens in one of the paths *)
-  | NoAllocation, _ | _, NoAllocation -> NoAllocation
+  (* no polling happens in one of the paths *)
+  | NoPoll, _ | _, NoPoll -> NoPoll
 
 (* Check each sequence of instructions in the array [arr] and
    combine their allocation results *)
@@ -62,7 +62,7 @@ let rec reduce_paths_array arr =
   in
   let res = red_arr None arr (Array.length arr - 1) in
   match res with 
-  | None -> NoAllocation 
+  | None -> NoPoll 
   | Some v -> v
 (* Check each sequence of isntructions in the list [l] and
    combine their allocation results *)
@@ -80,32 +80,32 @@ and reduce_paths_list l =
         red_list (Some new_acc) tl
   in
   let res = red_list None l in
-  match res with None -> NoAllocation | Some v -> v
+  match res with None -> NoPoll | Some v -> v
 (* Check a sequence of instructions from [f] and return whether
    they allocate, don't allocate or exit with allocation *)
-and check_path (f : Mach.instruction) : allocation_result =
+and check_path (f : Mach.instruction) : path_result =
   match f.desc with
   | Iifthenelse (_, i0, i1) -> (
       match combine_paths (check_path i0) (check_path i1) with
-      | NoAllocation -> check_path f.next
+      | NoPoll -> check_path f.next
       | pv -> pv )
   | Iswitch (_, cases) -> (
       let case_state = reduce_paths_array cases in
-      match case_state with NoAllocation -> check_path f.next | pv -> pv )
+      match case_state with NoPoll -> check_path f.next | pv -> pv )
   | Icatch (_, handlers, body) -> (
       let handlers_state =
         reduce_paths_list (List.map (fun (_, h) -> h) handlers)
       in
       match combine_paths handlers_state (check_path body) with
-      | NoAllocation -> check_path f.next
+      | NoPoll -> check_path f.next
       | pv -> pv )
   | Itrywith (body, handler) -> (
       match combine_paths (check_path body) (check_path handler) with
-      | NoAllocation -> check_path f.next
+      | NoPoll -> check_path f.next
       | pv -> pv )
   | Ireturn | Iop (Itailcall_ind _) | Iop (Itailcall_imm _) -> Exited
-  | Iend | Iexit _ -> NoAllocation
-  | Iop (Ialloc _) | Iraise _ -> Allocation (* Iraise included here because
+  | Iend | Iexit _ -> NoPoll
+  | Iop (Ialloc _) | Iraise _ -> WillPoll (* Iraise included here because
                                                 it has a poll inserted *)
   | Iop _ -> check_path f.next
 
@@ -113,8 +113,8 @@ and check_path (f : Mach.instruction) : allocation_result =
    allocate and this is used to avoid adding polls unnecessarily *)
 let allocates_unconditionally (i : Mach.instruction) =
   match check_path i with 
-  | Allocation -> true 
-  | NoAllocation | Exited -> false
+  | WillPoll -> true 
+  | NoPoll | Exited -> false
 
 (* checks whether from Mach instruction [i] the sequence of isntructions
    makes a call or contains a loop *)
@@ -267,7 +267,7 @@ let ignored_functions = [ "caml_apply2"; "caml_apply3" ]
 let is_ignored_function s =
   List.exists (fun x -> String.equal x s) ignored_functions
 
-let funcdecl (i : Mach.fundecl) : Mach.fundecl =
+let instrument_fundecl ~future_funcnames:_ (i : Mach.fundecl) : Mach.fundecl =
   if is_ignored_function i.fun_name then i
   else
     let f = i.fun_body in

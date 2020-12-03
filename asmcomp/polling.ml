@@ -14,6 +14,8 @@
 
 open Mach
 
+module StringSet = Set.Make (String)
+
 (* Add a poll test and polling instruction before [f]. In the later linearisation
    pass this will simplify in to a conditional and backwards jump pair *)
 let add_fused_poll_before (f : Mach.instruction) : Mach.instruction =
@@ -47,12 +49,12 @@ let combine_paths p0 p1 =
 
 (* Check each sequence of instructions in the array [arr] and
    combine their allocation results *)
-let rec reduce_paths_array arr =
+let rec reduce_paths_array ~future_funcnames arr =
   let rec red_arr acc arr n =
     match n with
     | 0 -> acc
     | _ ->
-        let curr_path = check_path arr.(n) in
+        let curr_path = check_path ~future_funcnames arr.(n) in
         let new_acc =
           match acc with
           | None -> curr_path
@@ -64,14 +66,14 @@ let rec reduce_paths_array arr =
   match res with 
   | None -> NoPoll 
   | Some v -> v
-(* Check each sequence of isntructions in the list [l] and
+(* Check each sequence of instructions in the list [l] and
    combine their allocation results *)
-and reduce_paths_list l =
+and reduce_paths_list ~future_funcnames l =
   let rec red_list acc l =
     match l with
     | [] -> acc
     | h :: tl ->
-        let curr_path = check_path h in
+        let curr_path = check_path ~future_funcnames h in
         let new_acc =
           match acc with
           | None -> curr_path
@@ -82,37 +84,45 @@ and reduce_paths_list l =
   let res = red_list None l in
   match res with None -> NoPoll | Some v -> v
 (* Check a sequence of instructions from [f] and return whether
-   they allocate, don't allocate or exit with allocation *)
-and check_path (f : Mach.instruction) : path_result =
+   they poll, don't poll or exit without polling *)
+and check_path ~future_funcnames (f : Mach.instruction) : path_result =
   match f.desc with
   | Iifthenelse (_, i0, i1) -> (
-      match combine_paths (check_path i0) (check_path i1) with
-      | NoPoll -> check_path f.next
+      match combine_paths (check_path ~future_funcnames i0) (check_path ~future_funcnames i1) with
+      | NoPoll -> check_path ~future_funcnames f.next
       | pv -> pv )
   | Iswitch (_, cases) -> (
-      let case_state = reduce_paths_array cases in
-      match case_state with NoPoll -> check_path f.next | pv -> pv )
+      let case_state = reduce_paths_array ~future_funcnames cases in
+      match case_state with NoPoll -> check_path ~future_funcnames f.next | pv -> pv )
   | Icatch (_, handlers, body) -> (
       let handlers_state =
-        reduce_paths_list (List.map (fun (_, h) -> h) handlers)
+        reduce_paths_list ~future_funcnames (List.map (fun (_, h) -> h) handlers)
       in
-      match combine_paths handlers_state (check_path body) with
-      | NoPoll -> check_path f.next
+      match combine_paths handlers_state (check_path ~future_funcnames body) with
+      | NoPoll -> check_path ~future_funcnames f.next
       | pv -> pv )
   | Itrywith (body, handler) -> (
-      match combine_paths (check_path body) (check_path handler) with
-      | NoPoll -> check_path f.next
+      match combine_paths (check_path ~future_funcnames body) (check_path ~future_funcnames handler) with
+      | NoPoll -> check_path ~future_funcnames f.next
       | pv -> pv )
-  | Ireturn | Iop (Itailcall_ind _) | Iop (Itailcall_imm _) -> Exited
+  | Ireturn | Iop (Itailcall_ind _) -> Exited
+  | Iop (Icall_imm { func; _ } | Itailcall_imm { func; _ }) ->
+    if (StringSet.mem func future_funcnames) then
+      (* this means we have a call to a function that might be a self call
+         or a call to a future function (which won't have a poll) *)
+      Exited
+    else
+      (* if we call a function already defined, we have already taken care of polling *)
+      WillPoll 
   | Iend | Iexit _ -> NoPoll
   | Iop (Ialloc _) | Iraise _ -> WillPoll (* Iraise included here because
                                                 it has a poll inserted *)
-  | Iop _ -> check_path f.next
+  | Iop _ -> check_path ~future_funcnames f.next
 
 (* This determines whether from a given instruction we unconditionally
    allocate and this is used to avoid adding polls unnecessarily *)
-let allocates_unconditionally (i : Mach.instruction) =
-  match check_path i with 
+let polls_unconditionally ~future_funcnames (i : Mach.instruction) =
+  match check_path ~future_funcnames i with 
   | WillPoll -> true 
   | NoPoll | Exited -> false
 
@@ -154,57 +164,57 @@ let is_leaf_func_without_loops (fun_body : Mach.instruction) =
 (* returns a list of ids for the handlers of recursive catches from
    Mach instruction [f]. These are used to later add polls before
    exits to them. *)
-let rec find_rec_handlers (f : Mach.instruction) =
+let rec find_rec_handlers ~future_funcnames (f : Mach.instruction) =
   match f.desc with
   | Iifthenelse (_, ifso, ifnot) ->
-      let ifso_rec_handlers = find_rec_handlers ifso in
-      let ifnot_rec_handlers = find_rec_handlers ifnot in
-      let next_rec_handlers = find_rec_handlers f.next in
+      let ifso_rec_handlers = find_rec_handlers ~future_funcnames ifso in
+      let ifnot_rec_handlers = find_rec_handlers ~future_funcnames ifnot in
+      let next_rec_handlers = find_rec_handlers ~future_funcnames f.next in
       ifso_rec_handlers @ ifnot_rec_handlers @ next_rec_handlers
   | Iswitch (_, cases) ->
       let case_rec_handlers =
         Array.fold_left
           (fun agg_rec_handlers case ->
-            agg_rec_handlers @ find_rec_handlers case)
+            agg_rec_handlers @ find_rec_handlers ~future_funcnames case)
           [] cases
       in
-      case_rec_handlers @ find_rec_handlers f.next
+      case_rec_handlers @ find_rec_handlers ~future_funcnames f.next
   | Icatch (rec_flag, handlers, body) -> (
       match rec_flag with
       | Recursive ->
           let rec_handlers =
             List.map
               (fun (id, handler) ->
-                let inner_rec_handlers = find_rec_handlers handler in
+                let inner_rec_handlers = find_rec_handlers ~future_funcnames handler in
                 let current_rec_handlers =
-                  if not (allocates_unconditionally handler) then [ id ] else []
+                  if not (polls_unconditionally ~future_funcnames handler) then [ id ] else []
                 in
                 inner_rec_handlers @ current_rec_handlers)
               handlers
             |> List.flatten
           in
-          let body_rec_handlers = find_rec_handlers body in
-          body_rec_handlers @ rec_handlers @ find_rec_handlers f.next
+          let body_rec_handlers = find_rec_handlers ~future_funcnames body in
+          body_rec_handlers @ rec_handlers @ find_rec_handlers ~future_funcnames f.next
       | Nonrecursive ->
           let non_rec_catch_handlers =
             List.fold_left
               (fun tmp_rec_handlers (_, handler) ->
-                tmp_rec_handlers @ find_rec_handlers handler)
+                tmp_rec_handlers @ find_rec_handlers ~future_funcnames handler)
               [] handlers
           in
-          let body_rec_handlers = find_rec_handlers body in
-          body_rec_handlers @ non_rec_catch_handlers @ find_rec_handlers f.next
+          let body_rec_handlers = find_rec_handlers ~future_funcnames body in
+          body_rec_handlers @ non_rec_catch_handlers @ find_rec_handlers ~future_funcnames f.next
       )
   | Itrywith (body, handler) ->
-      let handler_rec_handler = find_rec_handlers handler in
-      let body_rec_handlers = find_rec_handlers body in
-      body_rec_handlers @ handler_rec_handler @ find_rec_handlers f.next
+      let handler_rec_handler = find_rec_handlers ~future_funcnames handler in
+      let body_rec_handlers = find_rec_handlers ~future_funcnames body in
+      body_rec_handlers @ handler_rec_handler @ find_rec_handlers ~future_funcnames f.next
   | Iexit _ | Iend | Ireturn
   | Iop (Itailcall_ind _)
   | Iop (Itailcall_imm _)
   | Iraise _ ->
       []
-  | Iop _ -> find_rec_handlers f.next
+  | Iop _ -> find_rec_handlers ~future_funcnames f.next
 
 (* given the list of handler ids [rec_handelrs] for recursive catches, add polls before
    backwards edges starting from Mach instruction [i] *)
@@ -260,16 +270,10 @@ let instrument_body_with_polls (rec_handlers : int list) (i : Mach.instruction)
   in
   instrument_body [] i
 
-(* adding a poll to these functions is rarely what we want *)
-let ignored_functions = [ "caml_apply2"; "caml_apply3" ]
-
-(* is the function name [s] in the list of functions to ignore adding polls to? *)
-let is_ignored_function s =
-  List.exists (fun x -> String.equal x s) ignored_functions
-
-let instrument_fundecl ~future_funcnames:_ (i : Mach.fundecl) : Mach.fundecl =
-  if is_ignored_function i.fun_name then i
-  else
+let instrument_fundecl ~future_funcnames (i : Mach.fundecl) : Mach.fundecl =
     let f = i.fun_body in
-    let rec_handlers = find_rec_handlers f in
+    let rec_handlers = find_rec_handlers ~future_funcnames f in
     { i with fun_body = instrument_body_with_polls rec_handlers f }
+
+let requires_prologue_poll ~future_funcnames (f : Mach.instruction) : bool =
+  polls_unconditionally ~future_funcnames f

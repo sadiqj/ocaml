@@ -2,7 +2,7 @@
 (*                                                                        *)
 (*                                 OCaml                                  *)
 (*                                                                        *)
-(*                Sadiq Jaffer, Ocaml Labs Consultancy Ltd                *)
+(*                Sadiq Jaffer, OCaml Labs Consultancy Ltd                *)
 (*                                                                        *)
 (*   Copyright 2020 OCaml Labs Consultancy Ltd                           *)
 (*                                                                        *)
@@ -126,41 +126,6 @@ let polls_unconditionally ~future_funcnames (i : Mach.instruction) =
   | WillPoll -> true 
   | NoPoll | Exited -> false
 
-(* checks whether from Mach instruction [i] the sequence of isntructions
-   makes a call or contains a loop *)
-let rec contains_calls_or_loops (i : Mach.instruction) =
-  match i.desc with
-  | Iifthenelse (_, ifso, ifnot) ->
-      contains_calls_or_loops ifso
-      || contains_calls_or_loops ifnot
-      || contains_calls_or_loops i.next
-  | Iswitch (_, cases) ->
-      Array.exists (fun c -> contains_calls_or_loops c) cases
-      || contains_calls_or_loops i.next
-  | Icatch (rec_flag, handlers, body) -> (
-      match rec_flag with
-      | Recursive -> true
-      | Nonrecursive ->
-          List.exists (fun (_, h) -> contains_calls_or_loops h) handlers
-          || contains_calls_or_loops body
-          || contains_calls_or_loops i.next )
-  | Itrywith (body, handler) ->
-      contains_calls_or_loops body
-      || contains_calls_or_loops handler
-      || contains_calls_or_loops i.next
-  | Iend -> false
-  | Iop
-      ( Iextcall _ | Icall_ind _ | Icall_imm _ | Itailcall_imm _
-      | Itailcall_ind _ ) ->
-      true
-  | Ireturn | Iexit _ | Iraise _ -> false
-  | Iop _ -> contains_calls_or_loops i.next
-
-(* checks whether function body [fun_body] is a leaf function. That is
-   it does not contain calls or loops *)
-let is_leaf_func_without_loops (fun_body : Mach.instruction) =
-  not (contains_calls_or_loops fun_body)
-
 (* returns a list of ids for the handlers of recursive catches from
    Mach instruction [f]. These are used to later add polls before
    exits to them. *)
@@ -271,9 +236,9 @@ let instrument_body_with_polls (rec_handlers : int list) (i : Mach.instruction)
   instrument_body [] i
 
 let instrument_fundecl ~future_funcnames (i : Mach.fundecl) : Mach.fundecl =
-    let f = i.fun_body in
-    let rec_handlers = find_rec_handlers ~future_funcnames f in
-    { i with fun_body = instrument_body_with_polls rec_handlers f }
+  let f = i.fun_body in
+  let rec_handlers = find_rec_handlers ~future_funcnames f in
+  { i with fun_body = instrument_body_with_polls rec_handlers f }
 
 let requires_prologue_poll ~future_funcnames (f : Mach.instruction) : bool =
   polls_unconditionally ~future_funcnames f

@@ -237,8 +237,8 @@ let instrument_body_with_polls (rec_handlers : int list) (i : Mach.instruction)
 
 let instrument_fundecl ~future_funcnames (i : Mach.fundecl) : Mach.fundecl =
   let f = i.fun_body in
-  let rec_handlers = find_rec_handlers ~future_funcnames f in
-  { i with fun_body = instrument_body_with_polls rec_handlers f }
+  let _ = find_rec_handlers ~future_funcnames f in
+  { i with fun_body = instrument_body_with_polls [] f }
 
 let requires_prologue_poll ~future_funcnames (f : Mach.instruction) : bool =
   polls_unconditionally ~future_funcnames f

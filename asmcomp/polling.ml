@@ -241,4 +241,5 @@ let instrument_fundecl ~future_funcnames (i : Mach.fundecl) : Mach.fundecl =
   { i with fun_body = instrument_body_with_polls rec_handlers f }
 
 let requires_prologue_poll ~future_funcnames (f : Mach.instruction) : bool =
-  polls_unconditionally ~future_funcnames f
+  let _ = polls_unconditionally ~future_funcnames f in
+    false

@@ -18,7 +18,7 @@
 #include <stdlib.h>
 #include <time.h>
 
-void caml_call_poll()
+void caml_call_gc()
 {
 }
 

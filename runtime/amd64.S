@@ -450,42 +450,6 @@ CFI_STARTPROC
 CFI_ENDPROC
 ENDFUNCTION(G(caml_allocN))
 
-/* Polling */
-FUNCTION(G(caml_call_poll))
-        CFI_STARTPROC
-LBL(caml_call_poll):
-    /* Record lowest stack address and return address. */
-        movq    (%rsp), %r11
-        movq    %r11, Caml_state(last_return_address)
-        leaq    8(%rsp), %r11
-        movq    %r11, Caml_state(bottom_of_stack)
-    /* Touch the stack to trigger a recoverable segfault
-       if insufficient space remains */
-        subq    $(STACK_PROBE_SIZE), %rsp; CFI_ADJUST(STACK_PROBE_SIZE);
-        movq    %r11, 0(%rsp)
-        addq    $(STACK_PROBE_SIZE), %rsp; CFI_ADJUST(-STACK_PROBE_SIZE);
-    /* Build array of registers, save it into Caml_state->gc_regs */
-#ifdef WITH_FRAME_POINTERS
-        ENTER_FUNCTION          ;
-#else
-        pushq   %rbp; CFI_ADJUST(8);
-#endif
-        SAVE_REGS_AND_YOUNG_PTR_FOR_GC_OR_POLL
-    /* Call the garbage collector */
-        PREPARE_FOR_C_CALL
-        call    GCALL(caml_poll)
-        CLEANUP_AFTER_C_CALL
-        RESTORE_REGS_AND_YOUNG_PTR_FOR_GC_OR_POLL
-#ifdef WITH_FRAME_POINTERS
-        LEAVE_FUNCTION
-#else
-        popq    %rbp; CFI_ADJUST(-8);
-#endif
-    /* Return to caller */
-        ret
-CFI_ENDPROC
-ENDFUNCTION(G(caml_call_poll))
-
 /* Call a C function from OCaml */
 
 FUNCTION(G(caml_c_call))

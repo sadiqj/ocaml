@@ -88,19 +88,23 @@ void caml_garbage_collection(void)
      including allocations combined by Comballoc */
   alloc_len = (unsigned char*)(&d->live_ofs[d->num_live]);
   nallocs = *alloc_len++;
-  for (i = 0; i < nallocs; i++) {
-    allocsz += Whsize_wosize(Wosize_encoded_alloc_len(alloc_len[i]));
+
+  if (nallocs == 0) {
+    /* This is a poll */
+    caml_process_pending_actions();
   }
-  /* We have computed whsize (including header), but need wosize (without) */
-  allocsz -= 1;
+  else
+  {
+    for (i = 0; i < nallocs; i++) {
+      allocsz += Whsize_wosize(Wosize_encoded_alloc_len(alloc_len[i]));
+    }
 
-  caml_alloc_small_dispatch(allocsz, CAML_DO_TRACK | CAML_FROM_CAML,
-                            nallocs, alloc_len);
-}
+    /* We have computed whsize (including header), but need wosize (without) */
+    allocsz -= 1;
 
-void caml_poll(void)
-{
-  caml_process_pending_actions();
+    caml_alloc_small_dispatch(allocsz, CAML_DO_TRACK | CAML_FROM_CAML,
+                              nallocs, alloc_len);
+  }
 }
 
 DECLARE_SIGNAL_HANDLER(handle_signal)

@@ -310,10 +310,7 @@ let emit_call_gc gc =
     assert Config.spacetime;
     spacetime_before_uninstrumented_call ~node_ptr ~index
   end;
-  if gc.is_poll then
-    emit_call "caml_call_poll"
-  else
-    emit_call "caml_call_gc";
+  emit_call "caml_call_gc";
   def_label gc.gc_frame;
   I.jmp (label gc.gc_return_lbl)
 
@@ -942,7 +939,7 @@ let emit_instr fallthrough i =
       let gc_call_label = new_label () in  
       let label_after_gc = new_label() in
       let lbl_frame =
-        record_frame_label ?label:None i.live (Dbg_other i.dbg)
+        record_frame_label ?label:None i.live (Dbg_alloc [])
       in
       begin
         match check_young_limit with

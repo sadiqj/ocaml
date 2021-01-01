@@ -14,7 +14,7 @@
 
    ignore(Sys.opaque_identity(ref 41)) is used wherever we want to do an
    allocation in order to use some minor heap in order for the minor
-   collections stat to be incremenets.
+   collections stat to be incremented.
 
    ignore(Sys.opaque_identity(ref 42)) is used wherever we want an allocation
    for the purposes of testing whether a poll would be elided or not.
@@ -71,21 +71,21 @@ let polls_added_to_functions () =
   request_minor_gc ();
   func_with_added_poll_because_loop ();
   let minors_now = minor_gcs () in
-  assert (minors_before + 1 = minors_now);
+  assert (minors_before = minors_now);
 
   ignore(Sys.opaque_identity(ref 41));
   let minors_before = minor_gcs () in
   request_minor_gc ();
   func_with_added_poll_because_call ();
   let minors_now = minor_gcs () in
-  assert (minors_before +1 = minors_now);
+  assert (minors_before = minors_now);
 
   ignore(Sys.opaque_identity(ref 41));
   let minors_before = minor_gcs () in
   request_minor_gc ();
   func_with_added_poll_because_allocation_is_conditional 1;
   let minors_now = minor_gcs () in
-  assert (minors_before +1 = minors_now)
+  assert (minors_before = minors_now)
 
 (* These next functions test that polls are not added to functions that
    unconditionally allocate. We need the empty loop to avoid these functions
@@ -205,24 +205,96 @@ let polls_not_added_to_leaf_functions () =
   let minors_now = minor_gcs () in
   assert(minors_before = minors_now)
 
-(* this next set of functions tests that tail recursive functions
+(* this next set of functions tests that self tail recursive functions
    have polls added correctly *)
-let rec rec_func n =
+let rec self_rec_func n =
   match n with
   | 0 -> 0
-  | _ -> begin
-    ignore(Sys.opaque_identity(ref 41)); (* need to use _some_ minor heap *)
-    request_minor_gc (); 
-    (rec_func[@tailcall]) (n-1)
-  end
+  | _ ->
+    begin
+    let n1 = Sys.opaque_identity(n-1) in
+      (self_rec_func[@tailcall]) n1
+    end
 
-let polls_added_to_recursive_functions () =
+let polls_added_to_self_recursive_functions () =
   let minors_before = minor_gcs () in
-    ignore(rec_func 5);
+    request_minor_gc ();
+    ignore(self_rec_func 2);
     let minors_after = minor_gcs () in
-      assert(minors_before+5 = minors_after)
+      (* should be at least one minor gc from polls in self_rec_func *)
+      assert(minors_before < minors_after)
 
+(* this pair of mutually recursive functions is to test that a poll is
+   correctly placed in the first one compiled *)
+let rec mut_rec_func_even d =
+  match d with
+  | 0 -> 0
+  | _ -> mut_rec_func_odd (d-1)
+and mut_rec_func_odd d =
+  mut_rec_func_even (d-1)
+and mut_rec_func d =
+  match d with
+  | n when n mod 2 == 0 
+    -> mut_rec_func_even n
+  | n -> mut_rec_func_odd n
 
+let polls_added_to_mutually_recursive_functions () =
+  let minors_before = minor_gcs () in
+  request_minor_gc ();
+  ignore(mut_rec_func 3);
+  let minors_after = minor_gcs () in
+    (* should be at least one minor gc from polls in mut_rec_func *)
+    assert(minors_before < minors_after)
+
+(* this is to test that indirect tail calls (which might result in a self
+   call) have polls inserted in them. 
+   These correspond to Itailcall_ind at Mach *)
+let do_indirect_tail_call f n =
+  f (n-1)
+  [@@inline never]
+
+let polls_added_to_indirect_tail_calls () =
+  let f = fun n -> n+1 in
+  let minors_before = minor_gcs () in
+  request_minor_gc ();
+  ignore(do_indirect_tail_call f 3);
+  let minors_after = minor_gcs () in
+    (* should be at one minor gc from the poll in do_indirect_tail_call *)
+    assert(minors_before+1 = minors_after)
+
+(* this is to test that indirect non-tail calls do not have a poll placed
+   in them. These correspond to Icall_ind at Mach *)
+let do_indirect_call f n =
+  n * f (n-1)
+  [@@inline never]
+
+let polls_not_added_to_indirect_calls () =
+  let f = fun n -> n+1 in
+  let minors_before = minor_gcs () in
+  request_minor_gc ();
+  ignore(do_indirect_call f 3);
+  let minors_after = minor_gcs () in
+    (* should be at one minor gc from the poll in do_indirect_tail_call *)
+    assert(minors_before = minors_after)    
+
+(* this set of functions tests that we don't poll for immediate 
+  (non-tail) calls. These correspond to Icall_imm at Mach *)
+let call_func1 n =
+  Sys.opaque_identity(n-1)
+  [@@inline never]
+
+let call_func2 n =
+  n * (call_func1 (Sys.opaque_identity(n+1)))
+  [@@inline never]
+
+let polls_not_added_to_immediate_calls () =
+  let minors_before = minor_gcs () in
+  request_minor_gc ();
+  ignore(call_func1 100);
+  let minors_after = minor_gcs () in
+    (* should be no minor collections *)
+    assert(minors_before+5 = minors_after)
+  
 (* this set of functions tests whether polls are added before raises *)
 exception TestException
 
@@ -239,16 +311,35 @@ let polls_added_before_raises () =
         assert(minors_before+1 = minors_after)
 
 let () =
+  ignore(Sys.opaque_identity(ref 41));
   polls_added_to_loops (); (* relies on there being some minor heap usage *)
+
   ignore(Sys.opaque_identity(ref 41));
   polls_added_to_functions ();
+
   ignore(Sys.opaque_identity(ref 41));
-  polls_added_to_recursive_functions ();
+  polls_added_to_self_recursive_functions ();
+
+  ignore(Sys.opaque_identity(ref 41));
+  polls_added_to_mutually_recursive_functions ();
+
+  ignore(Sys.opaque_identity(ref 41));
+  polls_added_to_indirect_tail_calls ();
+
+  ignore(Sys.opaque_identity(ref 41));
+  polls_not_added_to_indirect_calls ();
+  
+  ignore(Sys.opaque_identity(ref 41));
+  polls_not_added_to_immediate_calls ();
+
   ignore(Sys.opaque_identity(ref 41));
   polls_not_added_unconditionally_allocating_functions ();
+
   ignore(Sys.opaque_identity(ref 41));
   polls_not_added_to_allocating_loops ();
+
   ignore(Sys.opaque_identity(ref 41));
   polls_not_added_to_leaf_functions ();
+
   ignore(Sys.opaque_identity(ref 41));
   polls_added_before_raises ()

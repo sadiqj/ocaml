@@ -35,7 +35,7 @@ let add_checked_poll_before check_young_limit (f : Mach.instruction) : Mach.inst
       [||] [||] f
 
 (* The result of a sequence of instructions *)
-type path_result = WillPoll | NoPoll | Exited
+type path_result = WillPoll | NoPoll | NeedPoll
 
 (* The combined result of two sequences of instructions *)
 let combine_paths p0 p1 =
@@ -43,7 +43,7 @@ let combine_paths p0 p1 =
   (* both paths will poll, might not need to poll *)
   | WillPoll, WillPoll -> WillPoll
   (* one path exits without polling *)
-  | Exited, _ | _, Exited -> Exited
+  | NeedPoll, _ | _, NeedPoll -> NeedPoll
   (* no polling happens in one of the paths *)
   | NoPoll, _ | _, NoPoll -> NoPoll
 
@@ -105,16 +105,16 @@ and check_path ~future_funcnames (f : Mach.instruction) : path_result =
       match combine_paths (check_path ~future_funcnames body) (check_path ~future_funcnames handler) with
       | NoPoll -> check_path ~future_funcnames f.next
       | pv -> pv )
-  | Ireturn | Iop (Itailcall_ind _) -> Exited
-  | Iop (Icall_imm { func; _ } | Itailcall_imm { func; _ }) ->
+  | Iop (Itailcall_ind _) -> NeedPoll
+  | Iop (Itailcall_imm { func; _ }) ->
     if (StringSet.mem func future_funcnames) then
       (* this means we have a call to a function that might be a self call
          or a call to a future function (which won't have a poll) *)
-      Exited
+      NeedPoll
     else
       (* if we call a function already defined, we have already taken care of polling *)
       WillPoll 
-  | Iend | Iexit _ -> NoPoll
+  | Iend | Iexit _ | Ireturn -> NoPoll
   | Iop (Ialloc _) | Iraise _ -> WillPoll (* Iraise included here because
                                                 it has a poll inserted *)
   | Iop _ -> check_path ~future_funcnames f.next
@@ -124,7 +124,7 @@ and check_path ~future_funcnames (f : Mach.instruction) : path_result =
 let polls_unconditionally ~future_funcnames (i : Mach.instruction) =
   match check_path ~future_funcnames i with 
   | WillPoll -> true 
-  | NoPoll | Exited -> false
+  | NoPoll | NeedPoll -> false
 
 (* returns a list of ids for the handlers of recursive catches from
    Mach instruction [f]. These are used to later add polls before
@@ -181,7 +181,7 @@ let rec find_rec_handlers ~future_funcnames (f : Mach.instruction) =
       []
   | Iop _ -> find_rec_handlers ~future_funcnames f.next
 
-(* given the list of handler ids [rec_handelrs] for recursive catches, add polls before
+(* given the list of handler ids [rec_handlers] for recursive catches, add polls before
    backwards edges starting from Mach instruction [i] *)
 let instrument_body_with_polls (rec_handlers : int list) (i : Mach.instruction)
     =
@@ -241,4 +241,6 @@ let instrument_fundecl ~future_funcnames (i : Mach.fundecl) : Mach.fundecl =
   { i with fun_body = instrument_body_with_polls rec_handlers f }
 
 let requires_prologue_poll ~future_funcnames (f : Mach.instruction) : bool =
-  polls_unconditionally ~future_funcnames f
+  match check_path ~future_funcnames f with 
+  | WillPoll | NoPoll -> false
+  | NeedPoll -> true

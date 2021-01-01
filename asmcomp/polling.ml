@@ -39,7 +39,7 @@ let add_checked_poll_before check_young_limit (f : Mach.instruction) : Mach.inst
 let rec path_polls (f : Mach.instruction) : bool =
   match f.desc with
   | Iifthenelse (_, i0, i1) ->
-      (path_polls i0) && (path_polls i1) && (path_polls f.next)
+      ((path_polls i0) && (path_polls i1)) || (path_polls f.next)
   | Iswitch (_, acts) -> 
       (Array.for_all path_polls acts) && (path_polls f.next)
   | Icatch (_, handlers, body) ->
@@ -70,7 +70,8 @@ let requires_prologue_poll ~future_funcnames (f : Mach.instruction) : bool =
         handler_code) handlers)) || (check_path i.next)
   | Itrywith (body, handler) -> 
       (check_path body) || (check_path handler) || (check_path i.next)
-  | Iop (Icall_imm { func; _ } | Itailcall_imm { func; _ }) ->
+  | Iop (Itailcall_ind _) -> true
+  | Iop (Itailcall_imm { func; _ }) ->
     if (StringSet.mem func future_funcnames) then
       (* this means we have a call to a function that might be a self call
          or a call to a future function (which won't have a poll) *)

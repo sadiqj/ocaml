@@ -293,7 +293,7 @@ let polls_not_added_to_immediate_calls () =
   ignore(call_func1 100);
   let minors_after = minor_gcs () in
     (* should be no minor collections *)
-    assert(minors_before+5 = minors_after)
+    assert(minors_before = minors_after)
   
 (* this set of functions tests whether polls are added before raises *)
 exception TestException

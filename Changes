@@ -3,6 +3,12 @@ Working version
 
 ### Language features:
 
+- #10039: Safepoints
+  Add poll points to native generated code. These are effectively
+  zero-sized allocations and fix some signal and remembered set
+  issues. Also multicore prerequisite.
+  (Sadiq Jaffer, Anmol Sahoo, Stephen Dolan, reviewed by ??)
+
 - #10013: Let-punning
   Allow 'let* x in ...' and 'let%ext x in ...' as shorthand for
     'let* x = x in ...' and 'let%ext x = x in ...' respectively.

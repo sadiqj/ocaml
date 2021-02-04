@@ -19,6 +19,11 @@
 #include <string.h>
 #include <stdarg.h>
 #include <stddef.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <errno.h>
 #include "caml/address_class.h"
 #include "caml/config.h"
 #include "caml/fail.h"
@@ -463,6 +468,77 @@ CAMLexport color_t caml_allocation_color (void *hp)
   }
 }
 
+#define ALLOC_BUFFER_SIZE_MAX 1 << 10
+uintnat alloc_buffer[ALLOC_BUFFER_SIZE_MAX];
+uintnat alloc_buffer_size;
+int trace_fd;
+
+void init_alloc_trace() {
+  pid_t pid;
+  char filename[256];
+
+  alloc_buffer_size = 0;
+  pid = getpid();
+  snprintf(filename, 256, "alloc.%d.bin", pid);
+
+  trace_fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+
+  if( trace_fd < 0 ) {
+    printf("Could not open allocation trace file: %s\n", filename);
+    exit(-1);
+  }
+}
+
+void flush_alloc_trace() {
+  int written = 0;
+  size_t bytes_to_write;
+  char* alloc_buffer_ptr;
+
+  bytes_to_write = alloc_buffer_size * sizeof(uintnat);
+  alloc_buffer_ptr = (char*)alloc_buffer;
+
+  while( 1 ) {
+    written = write(trace_fd, alloc_buffer_ptr, bytes_to_write);
+
+    if( written >= 0 ) {
+      bytes_to_write -= written;
+      alloc_buffer_ptr += written;
+    } else {
+      if( errno != EAGAIN ) {
+        printf("error %d writing allocation trade", errno);
+        abort();
+      }
+    }
+
+    if( bytes_to_write == 0 ) {
+      break;
+    }
+  }
+
+  fsync(trace_fd);
+  alloc_buffer_size = 0;
+}
+
+void track_alloc_alloc_trace(mlsize_t wosize, char* ptr) {
+  alloc_buffer[alloc_buffer_size++] = 0;
+  alloc_buffer[alloc_buffer_size++] = (uintnat)ptr;
+  alloc_buffer[alloc_buffer_size++] = wosize;
+
+  if( alloc_buffer_size+3 > ALLOC_BUFFER_SIZE_MAX ) {
+    flush_alloc_trace();
+  }
+}
+
+void track_free_alloc_trace(mlsize_t wosize, char* ptr) {
+  alloc_buffer[alloc_buffer_size++] = 1;
+  alloc_buffer[alloc_buffer_size++] = (uintnat)ptr;
+  alloc_buffer[alloc_buffer_size++] = wosize;
+
+  if( alloc_buffer_size+3 > ALLOC_BUFFER_SIZE_MAX ) {
+    flush_alloc_trace();
+  }
+}
+
 Caml_inline value caml_alloc_shr_aux (mlsize_t wosize, tag_t tag, int track,
                                       uintnat profinfo)
 {
@@ -478,6 +554,8 @@ Caml_inline value caml_alloc_shr_aux (mlsize_t wosize, tag_t tag, int track,
     caml_fl_add_blocks ((value) new_block);
     hp = caml_fl_allocate (wosize);
   }
+
+  track_alloc_alloc_trace(wosize, (char*)hp);
 
   CAMLassert (Is_in_heap (Val_hp (hp)));
 

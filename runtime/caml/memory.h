@@ -35,6 +35,11 @@
 extern "C" {
 #endif
 
+void init_alloc_trace();
+void flush_alloc_trace();
+void track_alloc_alloc_trace(mlsize_t wosize, char* ptr);
+void track_free_alloc_trace(mlsize_t wosize, char* ptr);
+
 CAMLextern value caml_alloc_shr (mlsize_t wosize, tag_t);
 
 /* Variant of [caml_alloc_shr] with explicit profinfo.

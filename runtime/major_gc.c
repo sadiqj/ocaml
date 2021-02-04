@@ -27,6 +27,7 @@
 #include "caml/gc.h"
 #include "caml/gc_ctrl.h"
 #include "caml/major_gc.h"
+#include "caml/memory.h"
 #include "caml/misc.h"
 #include "caml/mlvalues.h"
 #include "caml/roots.h"
@@ -715,6 +716,7 @@ static void sweep_slice (intnat work)
       case Caml_white:
         caml_gc_sweep_hp = sweep_hp;
         sweep_hp = (char *) caml_fl_merge_block (Val_hp (hp), limit);
+        track_free_alloc_trace(Wosize_hp(hp), hp);
         break;
       case Caml_blue:
         /* Only the blocks of the free-list are blue.  See [freelist.c]. */
@@ -987,6 +989,7 @@ void caml_finish_major_cycle (void)
   CAMLassert (caml_gc_phase == Phase_idle);
   Caml_state->stat_major_words += caml_allocated_words;
   caml_allocated_words = 0;
+  flush_alloc_trace();
 }
 
 /* Call this function to make sure [bsz] is greater than or equal
@@ -1058,6 +1061,8 @@ void caml_init_major_heap (asize_t heap_size)
   caml_allocated_words = 0;
   caml_extra_heap_resources = 0.0;
   for (i = 0; i < Max_major_window; i++) caml_major_ring[i] = 0.0;
+
+  init_alloc_trace();
 }
 
 void caml_set_major_window (int w){

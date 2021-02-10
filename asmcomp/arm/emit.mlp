@@ -672,6 +672,34 @@ let emit_instr i =
           `{emit_label lbl_frame}:	add	{emit_reg i.res.(0)}, alloc_ptr, #4\n`;
           1 + ninstr
         end
+    | Lop(Ipollcall { check_young_limit; return_label }) ->
+        let tmp_reg = phys_reg 7 (* use r7 as our temporary *) in
+        let lbl_after_poll = begin match return_label with
+        | None -> new_label()
+        | Some(lbl) -> lbl
+        end in
+        let lbl_frame =
+          record_frame_label i.live (Dbg_alloc [])
+        in
+          if check_young_limit then begin
+            let offset = Domainstate.(idx_of_field Domain_young_limit) * 8 in
+            `	ldr	{emit_reg tmp_reg}, [domain_state_ptr, {emit_int offset}]\n`;
+            `     cmp     alloc_ptr, {emit_reg tmp_reg}\n`;
+          end;
+          let lbl_call_gc = new_label() in
+          begin match check_young_limit with
+          | true ->  `     b.ls     {emit_label lbl_call_gc}\n`
+          | false -> `     b       {emit_label lbl_call_gc}\n`;
+          end;
+          begin match return_label with
+          | None -> `{emit_label lbl_after_poll}:`
+          | _ -> ()
+          end;
+          call_gc_sites :=
+            { gc_lbl = lbl_call_gc;
+              gc_return_lbl = lbl_after_poll;
+              gc_frame_lbl = lbl_frame } :: !call_gc_sites;
+          if check_young_limit then 3 else 1 (* num instructions *)
     | Lop(Iintop(Icomp cmp)) ->
         `	cmp	{emit_reg i.arg.(0)}, {emit_reg i.arg.(1)}\n`;
         1 + emit_set_condition cmp i.res.(0)
@@ -821,6 +849,17 @@ let emit_instr i =
         | Ieventest ->
             `	tst	{emit_reg i.arg.(0)}, #1\n`;
             `	beq	{emit_label lbl}\n`; 2
+        | Ipolltest test_direction ->
+          let tmp_reg = phys_reg 7 (* use r7 as our temporary *) in
+            let offset = Domainstate.(idx_of_field Domain_young_limit) * 8 in
+            `	ldr	{emit_reg tmp_reg}, [domain_state_ptr, {emit_int offset}]\n`;
+            begin match test_direction with
+              | Ipending ->
+              `     cmp     alloc_ptr, {emit_reg tmp_reg}\n`;
+              | Inotpending ->
+              `     cmp     {emit_reg tmp_reg}, alloc_ptr\n`;
+            end;
+            `	b.ls {emit_label lbl}\n`; 3
         end
     | Lcondbranch3(lbl0, lbl1, lbl2) ->
         `	cmp	{emit_reg i.arg.(0)}, #1\n`;

@@ -263,6 +263,11 @@ let regs_are_volatile _rs = false
 
 (* Registers destroyed by operations *)
 
+let destroyed_at_poll =            (* definitely destroy r7 *)
+  Array.of_list (List.map
+                   phys_reg
+                   [7])
+
 let destroyed_at_alloc =            (* r0-r6, d0-d15 preserved *)
   Array.of_list (List.map
                    phys_reg
@@ -294,6 +299,8 @@ let destroyed_at_oper = function
       destroyed_at_c_call
   | Iop(Ialloc _) ->
       destroyed_at_alloc
+  | Iop(Ipollcall _) ->
+    destroyed_at_poll
   | Iop(Iconst_symbol _) when !Clflags.pic_code ->
       [| phys_reg 3; phys_reg 8 |]  (* r3 and r12 destroyed *)
   | Iop(Iintop Imulh) when !arch < ARMv6 ->
@@ -316,6 +323,7 @@ let destroyed_at_reloadretaddr = [| |]
 let safe_register_pressure = function
     Iextcall _ -> if abi = EABI then 0 else 4
   | Ialloc _ -> if abi = EABI then 0 else 7
+  | Ipollcall _ -> if abi = EABI then 0 else 7
   | Iconst_symbol _ when !Clflags.pic_code -> 7
   | Iintop Imulh when !arch < ARMv6 -> 8
   | _ -> 9
@@ -323,6 +331,7 @@ let safe_register_pressure = function
 let max_register_pressure = function
     Iextcall _ -> if abi = EABI then [| 4; 0; 0 |] else [| 4; 8; 8 |]
   | Ialloc _ -> if abi = EABI then [| 7; 0; 0 |] else [| 7; 8; 8 |]
+  | Ipollcall _ -> if abi = EABI then [| 7; 0; 0 |] else [| 7; 8; 8 |]
   | Iconst_symbol _ when !Clflags.pic_code -> [| 7; 16; 32 |]
   | Iintoffloat | Ifloatofint
   | Iload(Single, _) | Istore(Single, _, _) -> [| 9; 15; 31 |]
@@ -334,7 +343,7 @@ let max_register_pressure = function
 
 let op_is_pure = function
   | Icall_ind | Icall_imm _ | Itailcall_ind | Itailcall_imm _
-  | Iextcall _ | Istackoffset _ | Istore _ | Ialloc _
+  | Iextcall _ | Istackoffset _ | Istore _ | Ialloc _ | Ipollcall _
   | Iintop(Icheckbound) | Iintop_imm(Icheckbound, _)
   | Ispecific(Ishiftcheckbound _) -> false
   | _ -> true

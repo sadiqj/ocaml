@@ -688,7 +688,7 @@ let emit_instr i =
           end;
           let lbl_call_gc = new_label() in
           begin match check_young_limit with
-          | true ->  `     b.ls     {emit_label lbl_call_gc}\n`
+          | true ->  `     bls     {emit_label lbl_call_gc}\n`
           | false -> `     b       {emit_label lbl_call_gc}\n`;
           end;
           begin match return_label with
@@ -859,7 +859,7 @@ let emit_instr i =
               | Inotpending ->
               `     cmp     {emit_reg tmp_reg}, alloc_ptr\n`;
             end;
-            `	b.ls {emit_label lbl}\n`; 3
+            `	bls {emit_label lbl}\n`; 3
         end
     | Lcondbranch3(lbl0, lbl1, lbl2) ->
         `	cmp	{emit_reg i.arg.(0)}, #1\n`;

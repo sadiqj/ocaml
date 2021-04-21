@@ -1180,7 +1180,8 @@ method emit_fundecl ~future_funcnames f =
   let polled_body =
     if not f.Cmm.fun_suppress_polls
         && Polling.requires_prologue_poll ~future_funcnames body then
-      instr_cons (Iop(Ipoll { return_label = None })) [||] [||] body
+      instr_cons_debug
+        (Iop(Ipoll { return_label = None })) [||] [||] body.dbg body
     else
       body
     in
@@ -1191,6 +1192,7 @@ method emit_fundecl ~future_funcnames f =
     fun_body = body_with_prologue;
     fun_codegen_options = f.Cmm.fun_codegen_options;
     fun_dbg  = f.Cmm.fun_dbg;
+    fun_poll_error = f.Cmm.fun_poll_error;
     fun_suppress_polls = f.Cmm.fun_suppress_polls;
     fun_num_stack_slots = Array.make Proc.num_register_classes 0;
     fun_contains_calls = !contains_calls;

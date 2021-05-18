@@ -549,8 +549,7 @@ let emit_poll env i return_label far =
     end
     | Some return_label ->
       begin
-        ` bge {emit_label return_label}\n`;
-        ` bl  {emit_label env.call_gc_label}\n`;
+        ` bltl  {emit_label env.call_gc_label}\n`;
         record_frame env i.live (Dbg_alloc []);
         ` b   {emit_label return_label}\n`
       end

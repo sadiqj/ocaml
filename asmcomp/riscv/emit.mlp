@@ -364,9 +364,9 @@ let emit_instr env i =
       `	ld	{emit_reg reg_tmp}, {emit_int offset}({emit_reg reg_domain_state_ptr})\n`;
       begin match return_label with
       | None -> `	bltu	{emit_reg reg_alloc_ptr}, {emit_reg reg_tmp}, {emit_label lbl_call_gc}\n`;
-      `{emit_label lbl_after_poll}:\n`;
+                `{emit_label lbl_after_poll}:\n`;
       | Some lbl -> ` bgeu  {emit_reg reg_alloc_ptr}, {emit_reg reg_tmp}, {emit_label lbl}\n`;
-      ` j {emit_label lbl_call_gc}\n`
+                    ` j {emit_label lbl_call_gc}\n`
       end;
       env.call_gc_sites <-
         { gc_lbl = lbl_call_gc;

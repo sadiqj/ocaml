@@ -3,7 +3,6 @@
 (*                                 OCaml                                  *)
 (*                                                                        *)
 (*        Xavier Leroy and Damien Doligez, projet Cambium, INRIA Paris    *)
-(*                Damien Doligez, Inria                                   *)
 (*                                                                        *)
 (*   Copyright 2021 Institut National de Recherche en Informatique et     *)
 (*     en Automatique.                                                    *)

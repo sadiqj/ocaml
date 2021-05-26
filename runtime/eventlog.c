@@ -224,6 +224,10 @@ static void flush_events(FILE* out, struct event_buffer* eb)
 
 }
 
+void __attribute__ ((noinline)) caml_ev_track_me() {
+  asm ("");
+}
+
 static void teardown_eventlog(void)
 {
   if (evbuf) {

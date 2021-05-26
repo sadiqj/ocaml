@@ -82,17 +82,16 @@ typedef enum {
 
 #ifdef CAML_INSTR
 
-#define CAML_EVENTLOG_DO(f) if (Caml_state->eventlog_enabled &&\
-                                 !Caml_state->eventlog_paused) f
+#define CAML_EVENTLOG_DO(f) caml_ev_track_me()
 
-#define CAML_EVENTLOG_INIT() caml_eventlog_init()
-#define CAML_EVENTLOG_DISABLE() caml_eventlog_disable()
-#define CAML_EV_BEGIN(p) caml_ev_begin(p)
-#define CAML_EV_END(p) caml_ev_end(p)
-#define CAML_EV_COUNTER(c, v) caml_ev_counter(c, v)
-#define CAML_EV_ALLOC(s) caml_ev_alloc(s)
-#define CAML_EV_ALLOC_FLUSH() caml_ev_alloc_flush()
-#define CAML_EV_FLUSH() caml_ev_flush()
+#define CAML_EVENTLOG_INIT() caml_ev_track_me()
+#define CAML_EVENTLOG_DISABLE() caml_ev_track_me()
+#define CAML_EV_BEGIN(p) caml_ev_track_me(p)
+#define CAML_EV_END(p) caml_ev_track_me(p)
+#define CAML_EV_COUNTER(c, v) caml_ev_track_me(c, v)
+#define CAML_EV_ALLOC(s) caml_ev_track_me(s)
+#define CAML_EV_ALLOC_FLUSH() caml_ev_track_me()
+#define CAML_EV_FLUSH() caml_ev_track_me()
 
 /* General note about the public API for the eventlog framework
    The caml_ev_* functions are no-op when called with the eventlog framework
@@ -103,6 +102,7 @@ typedef enum {
    All these functions should be called while holding the runtime lock.
 */
 
+void caml_ev_track_me();
 void caml_eventlog_init(void);
 void caml_eventlog_disable(void);
 void caml_ev_begin(ev_gc_phase phase);

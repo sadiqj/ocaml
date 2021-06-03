@@ -25,7 +25,7 @@
 #include "caml/codefrag.h"
 #include "caml/debugger.h"
 #include "caml/domain.h"
-#include "caml/eventlog.h"
+#include "caml/eventring.h"
 #include "caml/fail.h"
 #include "caml/freelist.h"
 #include "caml/gc.h"
@@ -115,7 +115,7 @@ value caml_startup_common(char_os **argv, int pooling)
   caml_verb_gc = 0x3F;
 #endif
   caml_parse_ocamlrunparam();
-  CAML_EVENTLOG_INIT();
+  CAML_EVENTRING_INIT();
 #ifdef DEBUG
   caml_gc_message (-1, "### OCaml runtime: debug mode ###\n");
 #endif

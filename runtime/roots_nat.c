@@ -27,7 +27,7 @@
 #include "caml/stack.h"
 #include "caml/roots.h"
 #include "caml/memprof.h"
-#include "caml/eventlog.h"
+#include "caml/eventring.h"
 #include <string.h>
 #include <stdio.h>
 

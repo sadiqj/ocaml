@@ -31,7 +31,7 @@
 #include "caml/signals.h"
 #include "caml/weak.h"
 #include "caml/memprof.h"
-#include "caml/eventlog.h"
+#include "caml/eventring.h"
 
 /* Pointers into the minor heap.
    [Caml_state->young_base]
@@ -460,7 +460,7 @@ extern uintnat caml_instr_alloc_jump;
 */
 void caml_gc_dispatch (void)
 {
-  CAML_EVENTLOG_DO({
+  CAML_INSTR_DO({
     CAML_EV_COUNTER(EV_C_ALLOC_JUMP, caml_instr_alloc_jump);
     caml_instr_alloc_jump =  0;
   });

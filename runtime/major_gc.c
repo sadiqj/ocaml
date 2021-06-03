@@ -34,7 +34,7 @@
 #include "caml/signals.h"
 #include "caml/weak.h"
 #include "caml/memprof.h"
-#include "caml/eventlog.h"
+#include "caml/eventring.h"
 
 #ifdef _MSC_VER
 Caml_inline double fmin(double a, double b) {
@@ -417,7 +417,7 @@ Caml_inline void mark_slice_darken(struct mark_stack* stk, value v, mlsize_t i,
 #else
   if (Is_block (child) && Is_in_heap (child)) {
 #endif
-    CAML_EVENTLOG_DO (++ *slice_pointers);
+    CAML_INSTR_DO (++ *slice_pointers);
     chd = Hd_val (child);
     if (Tag_hd (chd) == Forward_tag){
       value f = Forward_val (child);
@@ -585,7 +585,7 @@ static void mark_slice (intnat work)
     if (work <= 0) {
       if( can_mark ) {
         mark_stack_push(stk, me.block, me.offset, NULL);
-        CAML_EVENTLOG_DO({
+        CAML_INSTR_DO({
           CAML_EV_COUNTER(EV_C_MAJOR_MARK_SLICE_REMAIN, me_end - me.offset);
         });
       }
@@ -602,7 +602,7 @@ static void mark_slice (intnat work)
 
       work--;
 
-      CAML_EVENTLOG_DO({
+      CAML_INSTR_DO({
         slice_fields++;
       });
 
@@ -664,8 +664,11 @@ static void mark_slice (intnat work)
       }
     }
   }
-  CAML_EV_COUNTER(EV_C_MAJOR_MARK_SLICE_FIELDS, slice_fields);
-  CAML_EV_COUNTER(EV_C_MAJOR_MARK_SLICE_POINTERS, slice_pointers);
+
+  CAML_INSTR_DO({
+    CAML_EV_COUNTER(EV_C_MAJOR_MARK_SLICE_FIELDS, slice_fields);
+    CAML_EV_COUNTER(EV_C_MAJOR_MARK_SLICE_POINTERS, slice_pointers);
+  });
 }
 
 /* Clean ephemerons */
@@ -828,8 +831,10 @@ void caml_major_collection_slice (intnat howmuch)
     p = 0.3;
   }
 
-  CAML_EV_COUNTER (EV_C_MAJOR_WORK_EXTRA,
+  CAML_INSTR_DO({
+    CAML_EV_COUNTER (EV_C_MAJOR_WORK_EXTRA,
                   (uintnat) (caml_extra_heap_resources * 1000000));
+  });
 
   caml_gc_message (0x40, "ordered work = %"
                    ARCH_INTNAT_PRINTF_FORMAT "d words\n", howmuch);
@@ -919,7 +924,9 @@ void caml_major_collection_slice (intnat howmuch)
   caml_gc_message (0x40, "computed work = %"
                    ARCH_INTNAT_PRINTF_FORMAT "d words\n", computed_work);
   if (caml_gc_phase == Phase_mark){
-    CAML_EV_COUNTER (EV_C_MAJOR_WORK_MARK, computed_work);
+    CAML_INSTR_DO({
+      CAML_EV_COUNTER (EV_C_MAJOR_WORK_MARK, computed_work);
+    });
     CAML_EV_BEGIN(EV_MAJOR_MARK);
     mark_slice (computed_work);
     CAML_EV_END(EV_MAJOR_MARK);
@@ -929,7 +936,9 @@ void caml_major_collection_slice (intnat howmuch)
     caml_gc_message (0x02, "%%");
   }else{
     CAMLassert (caml_gc_phase == Phase_sweep);
-    CAML_EV_COUNTER (EV_C_MAJOR_WORK_SWEEP, computed_work);
+    CAML_INSTR_DO({
+      CAML_EV_COUNTER (EV_C_MAJOR_WORK_SWEEP, computed_work);
+    });
     CAML_EV_BEGIN(EV_MAJOR_SWEEP);
     sweep_slice (computed_work);
     CAML_EV_END(EV_MAJOR_SWEEP);

@@ -29,7 +29,7 @@
 #include "caml/misc.h"
 #include "caml/compact.h"
 #include "caml/printexc.h"
-#include "caml/eventlog.h"
+#include "caml/eventring.h"
 
 #define RAND_BLOCK_SIZE 64
 

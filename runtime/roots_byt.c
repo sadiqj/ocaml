@@ -28,7 +28,7 @@
 #include "caml/roots.h"
 #include "caml/stacks.h"
 #include "caml/memprof.h"
-#include "caml/eventlog.h"
+#include "caml/eventring.h"
 
 CAMLexport void (*caml_scan_roots_hook) (scanning_action f) = NULL;
 

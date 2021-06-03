@@ -27,7 +27,7 @@
 #include "caml/weak.h"
 #include "caml/minor_gc.h"
 #include "caml/signals.h"
-#include "caml/eventlog.h"
+#include "caml/eventring.h"
 
 value caml_ephe_list_head = 0;
 

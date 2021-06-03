@@ -30,7 +30,7 @@
 #include "caml/misc.h"
 #include "caml/mlvalues.h"
 #include "caml/signals.h"
-#include "caml/eventlog.h"
+#include "caml/eventring.h"
 #ifdef NATIVE_CODE
 #include "caml/stack.h"
 #else

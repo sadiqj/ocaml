@@ -33,7 +33,7 @@
 #include "caml/mlvalues.h"
 #include "caml/signals.h"
 #include "caml/memprof.h"
-#include "caml/eventlog.h"
+#include "caml/eventring.h"
 
 int caml_huge_fallback_count = 0;
 /* Number of times that mmapping big pages fails and we fell back to small

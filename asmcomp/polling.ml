@@ -199,4 +199,3 @@ let requires_prologue_poll ~future_funcnames fun_name i =
     false
   else
     potentially_recursive_tailcall ~fwd_func:future_funcnames i
-

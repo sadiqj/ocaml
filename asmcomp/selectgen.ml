@@ -1178,7 +1178,8 @@ method emit_fundecl ~future_funcnames f =
   instr_seq <- dummy_instr;
   self#insert_moves env loc_arg rarg;
   let polled_body =
-    if Polling.requires_prologue_poll ~future_funcnames !current_function_name body then
+    if Polling.requires_prologue_poll
+          ~future_funcnames !current_function_name body then
       instr_cons (Iop(Ipoll { return_label = None })) [||] [||] body
     else
       body

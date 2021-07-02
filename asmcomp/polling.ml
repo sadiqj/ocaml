@@ -186,7 +186,7 @@ let contains_poll instr =
   !poll
 
 let instrument_fundecl ~future_funcnames:_ (f : Mach.fundecl) : Mach.fundecl =
-  if is_assume_suppressed_poll_fun fun_name then
+  if is_assume_suppressed_poll_fun f.fun_name then
     f
   else
     let handler_needs_poll = polled_loops_analysis f.fun_body in

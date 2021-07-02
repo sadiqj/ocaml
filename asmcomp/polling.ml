@@ -186,10 +186,13 @@ let contains_poll instr =
   !poll
 
 let instrument_fundecl ~future_funcnames:_ (f : Mach.fundecl) : Mach.fundecl =
-  let handler_needs_poll = polled_loops_analysis f.fun_body in
-  let new_body = instr_body handler_needs_poll f.fun_body in
-  let new_contains_calls = f.fun_contains_calls || contains_poll new_body in
-  { f with fun_body = new_body; fun_contains_calls = new_contains_calls }
+  if is_assume_suppressed_poll_fun fun_name then
+    f
+  else
+    let handler_needs_poll = polled_loops_analysis f.fun_body in
+    let new_body = instr_body handler_needs_poll f.fun_body in
+    let new_contains_calls = f.fun_contains_calls || contains_poll new_body in
+    { f with fun_body = new_body; fun_contains_calls = new_contains_calls }
 
 let requires_prologue_poll ~future_funcnames fun_name i =
   if is_assume_suppressed_poll_fun fun_name then

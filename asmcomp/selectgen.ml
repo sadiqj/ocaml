@@ -1178,8 +1178,7 @@ method emit_fundecl ~future_funcnames f =
   instr_seq <- dummy_instr;
   self#insert_moves env loc_arg rarg;
   let polled_body =
-    if not f.Cmm.fun_suppress_polls
-        && Polling.requires_prologue_poll ~future_funcnames body then
+    if Polling.requires_prologue_poll ~future_funcnames !current_function_name body then
       instr_cons (Iop(Ipoll { return_label = None })) [||] [||] body
     else
       body
@@ -1191,7 +1190,6 @@ method emit_fundecl ~future_funcnames f =
     fun_body = body_with_prologue;
     fun_codegen_options = f.Cmm.fun_codegen_options;
     fun_dbg  = f.Cmm.fun_dbg;
-    fun_suppress_polls = f.Cmm.fun_suppress_polls;
     fun_num_stack_slots = Array.make Proc.num_register_classes 0;
     fun_contains_calls = !contains_calls;
   }

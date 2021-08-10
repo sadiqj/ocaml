@@ -128,6 +128,9 @@ static void teardown_eventring(void)
 
 void caml_eventring_init()
 { 
+{
+  return; // FIXME: Disable eventring
+  
   if( ring_ptr == NULL ) {
     int ring_fd, ret;
     // TODO: We need to have an OCAMLRUNPARAM for the location to place this

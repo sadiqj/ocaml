@@ -127,7 +127,6 @@ static void teardown_eventring(void)
 }
 
 void caml_eventring_init()
-{ 
 {
   return; // FIXME: Disable eventring
   

@@ -30,7 +30,7 @@ CAMLprim value unix_fork(value unit)
   if (ret == -1) uerror("fork", Nothing);
 
   if (ret == 0) {
-    caml_eventring_disable();
+    caml_eventring_destroy();
     caml_eventring_init();
   }
 

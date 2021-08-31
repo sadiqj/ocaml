@@ -18,8 +18,9 @@
 #include "eventlog.h"
 #include <stdint.h>
 
+#define CAML_HAS_EVENTRING
+
 #define CAML_EVENTRING_INIT() caml_eventring_init()
-#define CAML_EVENTRING_DISABLE() caml_eventring_disable()
 #define CAML_EV_BEGIN(p) caml_ev_begin(p)
 #define CAML_EV_END(p) caml_ev_end(p)
 #define CAML_EV_COUNTER(c, v) caml_ev_counter(c, v)
@@ -60,8 +61,11 @@ CAMLextern int caml_eventring_read_poll(struct caml_eventring_cursor* cursor,
 
  /* Functions for putting runtime data on to the eventring */
 
-void caml_eventring_init(void);
-void caml_eventring_disable();
+void caml_eventring_init();
+void caml_eventring_destroy();
+void caml_eventring_start();
+void caml_eventring_pause();
+void caml_eventring_resume();
 void caml_ev_begin(ev_gc_phase phase);
 void caml_ev_end(ev_gc_phase phase);
 void caml_ev_counter(ev_gc_counter counter, uint64_t val);

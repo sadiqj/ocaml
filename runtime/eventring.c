@@ -16,6 +16,7 @@
 
 #include "caml/mlvalues.h"
 #include "caml/memory.h"
+#include "caml/osdeps.h"
 #include "caml/eventring.h"
 
 #include <fcntl.h>
@@ -66,6 +67,7 @@ struct ring_buffer_header
 #define RING_ITEM_TYPE(header) (((header) >> 49) & ((1UL << 4) - 1))
 #define RING_ITEM_ID(header) (((header) >> 36) & ((1UL << 13) - 1))
 
+static char* eventring_path;
 static struct ring_buffer_header *ring_header = NULL;
 static uint64_t *ring_ptr = NULL;
 static char *ring_buffer_loc = NULL;
@@ -126,21 +128,46 @@ static void teardown_eventring(void)
   ring_header = NULL;
 }
 
-void caml_eventring_init()
+void caml_eventring_init() 
+{
+  eventring_path = caml_secure_getenv(T("OCAML_EVENTRING_PATH"));
+
+  if( caml_secure_getenv(T("OCAML_EVENTRING_ENABLED")) ) {
+    caml_eventring_start();
+  }
+}
+
+void caml_eventring_destroy()
+{
+  if( ring_ptr ) {
+    write_to_ring(EV_RUNTIME, EV_LIFECYCLE, EV_STOP, 0, NULL, 0);
+
+    Caml_state->eventlog_enabled = 0;
+
+    teardown_eventring();
+  }
+}
+
+void caml_eventring_start()
 { 
-  if( ring_ptr == NULL ) {
+  if( !ring_ptr ) {
     int ring_fd, ret;
-    // TODO: We need to have an OCAMLRUNPARAM for the location to place this
+
     ring_buffer_loc = caml_stat_alloc(RING_FILE_NAME_LEN);
 
     Caml_state->eventlog_startup_pid = getpid();
 
-    snprintf_os(ring_buffer_loc, RING_FILE_NAME_LEN, T("%ld.eventring"), Caml_state->eventlog_startup_pid);
+    if( eventring_path ) {
+      snprintf_os(ring_buffer_loc, RING_FILE_NAME_LEN, T("%s/%ld.eventring"), eventring_path, Caml_state->eventlog_startup_pid);
+    }
+    else
+    {
+      snprintf_os(ring_buffer_loc, RING_FILE_NAME_LEN, T("%ld.eventring"), Caml_state->eventlog_startup_pid);
+    }
 
     ring_total_file_size = RING_BUFFER_SIZE * sizeof(uint64_t) + sizeof(struct ring_buffer_header);
 
     ring_fd = open(ring_buffer_loc, O_RDWR | O_CREAT, (S_IRUSR | S_IWUSR));
-
     caml_stat_free(ring_buffer_loc);
 
     if (ring_fd < 0)
@@ -174,13 +201,22 @@ void caml_eventring_init()
   }
 }
 
-void caml_eventring_disable()
+void caml_eventring_pause()
 {
   if( Caml_state->eventlog_enabled && !Caml_state->eventlog_paused ) {
     write_to_ring(EV_RUNTIME, EV_LIFECYCLE, EV_PAUSE, 0, NULL, 0);
     Caml_state->eventlog_paused = 1;
   }
 }
+
+void caml_eventring_resume()
+{
+  if( Caml_state->eventlog_enabled && Caml_state->eventlog_paused ) {
+    write_to_ring(EV_RUNTIME, EV_LIFECYCLE, EV_RESUME, 0, NULL, 0);
+    Caml_state->eventlog_paused = 0;
+  }
+}
+
 
 static void write_to_ring(ev_category category, ev_type type, int event_id, int event_length, uint64_t *content, int word_offset)
 {

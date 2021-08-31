@@ -391,8 +391,18 @@ struct caml_eventring_cursor *caml_eventring_create_cursor(char *eventring_path,
   char *eventring_loc;
 
   eventring_loc = caml_stat_alloc(RING_FILE_NAME_LEN);
-  ret = snprintf_os(eventring_loc, RING_FILE_NAME_LEN,
+
+  /* TODO: We should do something more sensible here and avoid duplicating
+  with earlier code. */
+  if( eventring_path ) {
+    ret = snprintf_os(eventring_loc, RING_FILE_NAME_LEN,
                     T("%s/%d.eventring"), eventring_path, pid);
+  }
+  else
+  {
+    ret = snprintf_os(eventring_loc, RING_FILE_NAME_LEN,
+                    T("%d.eventring"), pid);
+  }
 
   if (ret < 0)
   {

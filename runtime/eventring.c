@@ -132,7 +132,7 @@ void caml_eventring_init()
 {
   eventring_path = caml_secure_getenv(T("OCAML_EVENTRING_PATH"));
 
-  if( true /* caml_secure_getenv(T("OCAML_EVENTRING_ENABLED"))*/ ) {
+  if( 1 /* caml_secure_getenv(T("OCAML_EVENTRING_ENABLED"))*/ ) {
     caml_eventring_start();
   }
 }

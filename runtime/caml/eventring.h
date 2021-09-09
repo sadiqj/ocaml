@@ -40,6 +40,9 @@ struct caml_eventring_callbacks {
     void (*ev_lost_events)(int lost_events);
 };
 
+/* Starts eventring. Needs to be called before [caml_eventring_create_cursor] */
+CAMLextern void caml_eventring_start();
+
 /* [eventring_path] is a path to a directory containing eventrings. [pid] is the
     process id (or equivalent) of the startup OCaml process. This function will
     return a cursor which can we be used with caml_eventring_read_poll to read
@@ -63,7 +66,6 @@ CAMLextern int caml_eventring_read_poll(struct caml_eventring_cursor* cursor,
 
 void caml_eventring_init();
 void caml_eventring_destroy();
-void caml_eventring_start();
 void caml_eventring_pause();
 void caml_eventring_resume();
 void caml_ev_begin(ev_gc_phase phase);

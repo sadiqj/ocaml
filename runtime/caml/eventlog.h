@@ -17,6 +17,8 @@
 #ifndef CAML_EVENTLOG_H
 #define CAML_EVENTLOG_H
 
+#define CAML_HAS_EVENTRING
+
 typedef enum {
     EV_INTERNAL,
     EV_LIFECYCLE,

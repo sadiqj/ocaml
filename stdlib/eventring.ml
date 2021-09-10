@@ -1,0 +1,75 @@
+(* Eventring *)
+
+type gc_counter = 
+    EV_C_ALLOC_JUMP
+|	EV_C_FORCE_MINOR_ALLOC_SMALL
+|	EV_C_FORCE_MINOR_MAKE_VECT
+|	EV_C_FORCE_MINOR_SET_MINOR_HEAP_SIZE
+|	EV_C_FORCE_MINOR_WEAK
+|	EV_C_FORCE_MINOR_MEMPROF
+|	EV_C_MAJOR_MARK_SLICE_REMAIN
+|	EV_C_MAJOR_MARK_SLICE_FIELDS
+|	EV_C_MAJOR_MARK_SLICE_POINTERS
+|	EV_C_MAJOR_WORK_EXTRA
+|	EV_C_MAJOR_WORK_MARK
+|	EV_C_MAJOR_WORK_SWEEP
+|	EV_C_MINOR_PROMOTED
+|	EV_C_REQUEST_MAJOR_ALLOC_SHR
+|	EV_C_REQUEST_MAJOR_ADJUST_GC_SPEED
+|	EV_C_REQUEST_MINOR_REALLOC_REF_TABLE
+|	EV_C_REQUEST_MINOR_REALLOC_EPHE_REF_TABLE
+|	EV_C_REQUEST_MINOR_REALLOC_CUSTOM_TABLE
+
+type gc_phase =
+    EV_COMPACT_MAIN
+|	EV_COMPACT_RECOMPACT
+|	EV_EXPLICIT_GC_SET
+|	EV_EXPLICIT_GC_STAT
+|	EV_EXPLICIT_GC_MINOR
+|	EV_EXPLICIT_GC_MAJOR
+|	EV_EXPLICIT_GC_FULL_MAJOR
+|	EV_EXPLICIT_GC_COMPACT
+|	EV_MAJOR
+|	EV_MAJOR_ROOTS
+|	EV_MAJOR_SWEEP
+|	EV_MAJOR_MARK_ROOTS
+|	EV_MAJOR_MARK_MAIN
+|	EV_MAJOR_MARK_FINAL
+|	EV_MAJOR_MARK
+|	EV_MAJOR_MARK_GLOBAL_ROOTS_SLICE
+|	EV_MAJOR_ROOTS_GLOBAL
+|	EV_MAJOR_ROOTS_DYNAMIC_GLOBAL
+|	EV_MAJOR_ROOTS_LOCAL
+|	EV_MAJOR_ROOTS_C
+|	EV_MAJOR_ROOTS_FINALISED
+|	EV_MAJOR_ROOTS_MEMPROF
+|	EV_MAJOR_ROOTS_HOOK
+|	EV_MAJOR_CHECK_AND_COMPACT
+|	EV_MINOR
+|	EV_MINOR_LOCAL_ROOTS
+|	EV_MINOR_REF_TABLES
+|	EV_MINOR_COPY
+|	EV_MINOR_UPDATE_WEAK
+|	EV_MINOR_FINALIZED
+|	EV_EXPLICIT_GC_MAJOR_SLICE
+
+type ev_lifecycle =
+    EV_START
+|   EV_STOP
+|   EV_PAUSE
+|   EV_RESUME
+
+type cursor
+type callbacks = {
+    ev_begin: int64 -> gc_phase -> unit;
+    ev_end: int64 -> gc_phase -> unit;
+    ev_counter: int64 -> gc_counter -> int64 -> unit;
+    ev_alloc: int64 -> int64 list -> unit;
+    ev_lifecycle: int64 -> ev_lifecycle;
+    ev_lost_events: int
+}
+
+external start : unit -> unit = "caml_eventring_start"
+external create_cursor : string -> int -> cursor = "caml_eventring_create_wrapped_cursor"
+external free_cursor : cursor -> unit = "caml_eventring_free_wrapped_cursor"
+external read_poll : cursor -> callbacks -> int = "caml_eventring_read_poll_wrapped"

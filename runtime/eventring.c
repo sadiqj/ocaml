@@ -295,7 +295,8 @@ void caml_ev_counter(ev_runtime_counter counter, uint64_t val)
   }
 }
 
-static uint64_t alloc_buckets[20] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+#define NUM_BUCKETS 20
+static uint64_t alloc_buckets[NUM_BUCKETS] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
 /* This function records allocations in caml_alloc_shr_aux in given bucket sizes
    These buckets are meant to be flushed explicitly by the caller through the
@@ -309,17 +310,17 @@ void caml_ev_alloc(uint64_t sz)
   if (Caml_state->eventlog_paused)
     return;
 
-  if (sz < 10)
+  if (sz < (NUM_BUCKETS/2))
   {
     ++alloc_buckets[sz];
   }
-  else if (sz < 100)
+  else if (sz < (NUM_BUCKETS*10/2))
   {
-    ++alloc_buckets[sz / 10 + 9];
+    ++alloc_buckets[sz / (NUM_BUCKETS/2) + (NUM_BUCKETS/2-1)];
   }
   else
   {
-    ++alloc_buckets[19];
+    ++alloc_buckets[NUM_BUCKETS-1];
   }
 }
 
@@ -335,9 +336,9 @@ void caml_ev_alloc_flush()
   if (Caml_state->eventlog_paused)
     return;
 
-  write_to_ring(EV_RUNTIME, EV_ALLOC, 0, 20, alloc_buckets, 0);
+  write_to_ring(EV_RUNTIME, EV_ALLOC, 0, NUM_BUCKETS, alloc_buckets, 0);
 
-  for (i = 1; i < 20; i++)
+  for (i = 1; i < NUM_BUCKETS; i++)
   {
     alloc_buckets[i] = 0;
   }

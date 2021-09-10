@@ -62,6 +62,12 @@ CAMLextern int caml_eventring_read_poll(struct caml_eventring_cursor* cursor,
 
 /* TODO: OCaml API for reading from the eventring */
 
+CAMLextern value caml_eventring_create_wrapped_cursor(char* eventring_path, int pid);
+CAMLextern void caml_eventring_free_wrapped_cursor(value wrapped_cursor);
+CAMLextern value caml_eventring_read_poll_wrapped(value wrapped_cursor, value callbacks);
+
+#ifdef CAML_INTERNALS
+
  /* Functions for putting runtime data on to the eventring */
 
 void caml_eventring_init();
@@ -74,6 +80,8 @@ void caml_ev_counter(ev_runtime_counter counter, uint64_t val);
 void caml_ev_alloc(uint64_t sz);
 void caml_ev_alloc_flush();
 void caml_ev_flush();
+
+#endif /* CAML_INTERNALS */
 
 #endif /*CAML_EVENTRING_H*/
 

@@ -18,8 +18,6 @@
 #include "eventlog.h"
 #include <stdint.h>
 
-#define CAML_HAS_EVENTRING
-
 #define CAML_EVENTRING_INIT() caml_eventring_init()
 #define CAML_EV_BEGIN(p) caml_ev_begin(p)
 #define CAML_EV_END(p) caml_ev_end(p)

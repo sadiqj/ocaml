@@ -1361,6 +1361,7 @@ module Complex      = Complex
 module Digest       = Digest
 module Either       = Either
 module Ephemeron    = Ephemeron
+module Eventring    = Eventring
 module Filename     = Filename
 module Float        = Float
 module Format       = Format

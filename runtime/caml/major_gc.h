@@ -98,6 +98,6 @@ void caml_set_major_window (int);
 */
 void caml_finalise_heap (void);
 
-#endif /* CAML_INTERNALiS */
+#endif /* CAML_INTERNALS */
 
 #endif /* CAML_MAJOR_GC_H */

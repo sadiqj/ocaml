@@ -422,7 +422,7 @@ struct caml_eventring_cursor *caml_eventring_create_cursor(char *eventring_path,
   }
 
   cursor->ring_total_file_size = tmp_stat.st_size;
-  ring_header = mmap(NULL, cursor->ring_total_file_size, PROT_READ, MAP_SHARED,
+  cursor->ring_header = mmap(NULL, cursor->ring_total_file_size, PROT_READ, MAP_SHARED,
                              ring_fd, 0);
   cursor->ring_ptr = (uint64_t *)(ring_header + 1);
   cursor->current_pos = 0;

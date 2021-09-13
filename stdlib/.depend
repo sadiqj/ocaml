@@ -227,6 +227,11 @@ stdlib__ephemeron.cmx : \
     stdlib__ephemeron.cmi
 stdlib__ephemeron.cmi : \
     stdlib__hashtbl.cmi
+stdlib__eventring.cmo : \
+    stdlib__eventring.cmi
+stdlib__eventring.cmx : \
+    stdlib__eventring.cmi
+stdlib__eventring.cmi :
 stdlib__filename.cmo : \
     stdlib__sys.cmi \
     stdlib__string.cmi \

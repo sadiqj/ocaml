@@ -39,18 +39,18 @@ struct caml_eventring_callbacks {
 };
 
 /* Starts eventring. Needs to be called before [caml_eventring_create_cursor] */
-CAMLextern void caml_eventring_start();
+extern value caml_eventring_start();
 
 /* [eventring_path] is a path to a directory containing eventrings. [pid] is the
     process id (or equivalent) of the startup OCaml process. This function will
     return a cursor which can we be used with caml_eventring_read_poll to read
     events from the eventrings. */
-CAMLextern struct caml_eventring_cursor* caml_eventring_create_cursor(
+extern struct caml_eventring_cursor* caml_eventring_create_cursor(
                                         char* eventring_path,
                                         int pid);
 
 /* frees a cursor obtained from caml_eventring_creator_cursor */
-CAMLextern void caml_eventring_free_cursor(struct caml_eventring_cursor* cursor);
+extern void caml_eventring_free_cursor(struct caml_eventring_cursor* cursor);
 
 /* polls the eventring pointed to by [cursor] and calls the appropriate callback
     provided in [callbacks] for each new event. Returns the number of events
@@ -60,11 +60,10 @@ CAMLextern int caml_eventring_read_poll(struct caml_eventring_cursor* cursor,
                              struct caml_eventring_callbacks* callbacks,
                              void* callback_data);
 
-/* TODO: OCaml API for reading from the eventring */
-
-CAMLextern value caml_eventring_create_wrapped_cursor(char* eventring_path, int pid);
-CAMLextern void caml_eventring_free_wrapped_cursor(value wrapped_cursor);
-CAMLextern value caml_eventring_read_poll_wrapped(value wrapped_cursor, value callbacks);
+/* OCaml API for reading from the eventring */
+extern value caml_eventring_create_wrapped_cursor(value eventring_path, value pid);
+extern value caml_eventring_free_wrapped_cursor(value wrapped_cursor);
+extern value caml_eventring_read_poll_wrapped(value wrapped_cursor, value callbacks);
 
 #ifdef CAML_INTERNALS
 

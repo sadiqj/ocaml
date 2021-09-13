@@ -14,6 +14,8 @@
 
 #define CAML_INTERNALS
 
+#include "caml/custom.h"
+#include "caml/fail.h"
 #include "caml/mlvalues.h"
 #include "caml/memory.h"
 #include "caml/osdeps.h"
@@ -51,10 +53,10 @@ typedef enum
 
 struct ring_buffer_header
 {
-  uint8_t version;
+  uint64_t version;
   atomic_uint_fast64_t ring_size; /* Ring size in 64-bit elements */
   atomic_uint_fast64_t ring_tail; /* New messages are written at the tail */
-  atomic_uint_fast64_t ring_head; /* The oldest message ends at the head */
+  atomic_uint_fast64_t ring_head; /* The oldest message starts at the head */
 };
 
 /* event header fields (for runtime events):
@@ -148,8 +150,8 @@ void caml_eventring_destroy()
   }
 }
 
-void caml_eventring_start()
-{
+CAMLprim value caml_eventring_start()
+{ 
   if( !ring_ptr ) {
     int ring_fd, ret;
 
@@ -194,11 +196,14 @@ void caml_eventring_start()
     close(ring_fd);
 
     Caml_state->eventlog_enabled = 1;
+    Caml_state->eventlog_paused = 0;
 
     write_to_ring(EV_RUNTIME, EV_LIFECYCLE, EV_START, 0, NULL, 0);
 
     atexit(&teardown_eventring);
   }
+
+  return Val_unit;
 }
 
 void caml_eventring_pause()
@@ -435,9 +440,11 @@ struct caml_eventring_cursor *caml_eventring_create_cursor(char *eventring_path,
 /* frees a cursor obtained from caml_eventring_reader_create */
 void caml_eventring_free_cursor(struct caml_eventring_cursor *cursor)
 {
-  cursor->cursor_open = 0;
-  munmap(ring_header, cursor->ring_total_file_size);
-  caml_stat_free(cursor);
+  if( cursor->cursor_open ) {
+    cursor->cursor_open = 0;
+    munmap(ring_header, cursor->ring_total_file_size);
+    caml_stat_free(cursor);
+  }
 }
 
 /* polls the eventring pointed to by [cursor] and calls the appropriate callback
@@ -548,3 +555,56 @@ int caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
 
   return events_consumed;
 }
+
+static void finalise_cursor(value v) {
+
+}
+
+static struct custom_operations cursor_operations = {
+  "eventring.cursor",
+  finalise_cursor,
+  custom_compare_default,
+  custom_hash_default,
+  custom_serialize_default,
+  custom_deserialize_default,
+  custom_compare_ext_default,
+  custom_fixed_length_default
+};
+
+#define Cursor_val(v) (*((struct caml_eventring_cursor**)Data_custom_val(v)))
+
+CAMLprim value caml_eventring_create_wrapped_cursor(value eventring_path, value pid) {
+  CAMLparam0();
+  CAMLlocal1(wrapper);
+  
+  wrapper = caml_alloc_custom(&cursor_operations, sizeof(struct caml_eventring_cursor
+*), 0, 1);
+
+  struct caml_eventring_cursor* cursor = caml_eventring_create_cursor(String_val(eventring_path), Int_val(pid));
+
+  if( cursor == NULL ) {
+    // TODO: Raise an actual exception here
+    caml_failwith("Could not obtain cursor");
+  }
+
+  Cursor_val(wrapper) = cursor;
+
+  return wrapper;
+}
+
+CAMLprim value caml_eventring_free_wrapped_cursor(value wrapped_cursor) {
+  CAMLparam1(wrapped_cursor);
+
+  struct caml_eventring_cursor* cursor = Cursor_val(wrapped_cursor);
+
+  if( cursor != NULL ) {
+    caml_eventring_free_cursor(cursor);
+    Cursor_val(wrapped_cursor) = NULL;
+  }
+
+  return Val_unit;
+};
+
+CAMLprim value caml_eventring_read_poll_wrapped(value wrapped_cursor, value callbacks) {
+  return Val_unit;
+};

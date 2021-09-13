@@ -60,16 +60,17 @@ type ev_lifecycle =
 |   EV_RESUME
 
 type cursor
+
 type callbacks = {
-    ev_begin: int64 -> gc_phase -> unit,
-    ev_end: int64 -> gc_phase -> unit,
-    ev_counter: int64 -> gc_counter -> int64 -> unit,
-    ev_alloc: int64 -> int64 list -> unit,
-    ev_lifecycle: int64 -> ev_lifecycle,
+    ev_begin: int64 -> gc_phase -> unit;
+    ev_end: int64 -> gc_phase -> unit;
+    ev_counter: int64 -> gc_counter -> int64 -> unit;
+    ev_alloc: int64 -> int64 list -> unit;
+    ev_lifecycle: int64 -> ev_lifecycle;
     ev_lost_events: int
 }
 
 val start : unit -> unit
-val create_cursor : string -> int -> Cursor
-val free_cursor : Cursor -> unit
-val read_poll : Cursor -> Callbacks -> int
+val create_cursor : string -> int -> cursor
+val free_cursor : cursor -> unit
+val read_poll : cursor -> callbacks -> int

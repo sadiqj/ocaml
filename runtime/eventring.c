@@ -268,7 +268,7 @@ static void write_to_ring(ev_category category, ev_message_type type, int event_
 
 /* Functions for putting runtime data on to the eventring */
 
-void caml_ev_begin(ev_gc_phase phase)
+void caml_ev_begin(ev_runtime_phase phase)
 {
   if (Caml_state->eventlog_enabled && !Caml_state->eventlog_paused && ring_ptr != NULL)
   {
@@ -276,7 +276,7 @@ void caml_ev_begin(ev_gc_phase phase)
   }
 }
 
-void caml_ev_end(ev_gc_phase phase)
+void caml_ev_end(ev_runtime_phase phase)
 {
   if (Caml_state->eventlog_enabled && !Caml_state->eventlog_paused && ring_ptr != NULL)
   {
@@ -284,7 +284,7 @@ void caml_ev_end(ev_gc_phase phase)
   }
 }
 
-void caml_ev_counter(ev_gc_counter counter, uint64_t val)
+void caml_ev_counter(ev_runtime_counter counter, uint64_t val)
 {
   if (Caml_state->eventlog_enabled && !Caml_state->eventlog_paused && ring_ptr != NULL)
   {
@@ -503,21 +503,21 @@ int caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
       switch (RING_ITEM_TYPE(header))
       {
       case EV_BEGIN:
-        if (callbacks->ev_begin)
+        if (callbacks->ev_runtime_begin)
         {
-          callbacks->ev_begin(callback_data, buf[1], RING_ITEM_ID(header));
+          callbacks->ev_runtime_begin(callback_data, buf[1], RING_ITEM_ID(header));
         }
         break;
       case EV_EXIT:
-        if (callbacks->ev_begin)
+        if (callbacks->ev_runtime_end)
         {
-          callbacks->ev_end(callback_data, buf[1], RING_ITEM_ID(header));
+          callbacks->ev_runtime_end(callback_data, buf[1], RING_ITEM_ID(header));
         }
         break;
       case EV_COUNTER:
-        if (callbacks->ev_counter)
+        if (callbacks->ev_runtime_counter)
         {
-          callbacks->ev_counter(callback_data, buf[1], buf[2], RING_ITEM_ID(header));
+          callbacks->ev_runtime_counter(callback_data, buf[1], buf[2], RING_ITEM_ID(header));
         }
         break;
       case EV_ALLOC:

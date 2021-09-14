@@ -8,48 +8,51 @@
 
 #include <assert.h>
 
-static int minors = 0;
-static int majors = 0;
-static int compacts = 0;
-
-static int minor_started = 0;
-static int major_started = 0;
-static int compact_started = 0;
+struct counters {
+    int minor_started;
+    int major_started;
+    int compact_started;
+    int minors;
+    int majors;
+    int compacts;
+};
 
 void start_eventring() {
     caml_eventring_start();
 }
 
-void ev_begin(uint64_t timestamp, ev_gc_phase phase) {
+void ev_begin(void* callback_data, uint64_t timestamp, ev_gc_phase phase) {
+    struct counters* tmp_counters = (struct counters*)callback_data;
     switch( phase ) {
         case EV_MINOR:
-            minor_started = 1;
+            tmp_counters->minor_started = 1;
             break;
         case EV_MAJOR:
-            major_started = 1;
+            tmp_counters->major_started = 1;
             break;
         case EV_COMPACT_MAIN:
-            compact_started = 1;
+            tmp_counters->compact_started = 1;
             break;
     }
 }
 
-void ev_end(uint64_t timestamp, ev_gc_phase phase) {
+void ev_end(void* callback_data, uint64_t timestamp, ev_gc_phase phase) {
+    struct counters* tmp_counters = (struct counters*)callback_data;
     switch( phase ) {
         case EV_MINOR:
-            assert(minor_started);
-            minor_started = 0;
-            minors++;
+            assert(tmp_counters->minor_started);
+            tmp_counters->minor_started = 0;
+            tmp_counters->minors++;
             break;
         case EV_MAJOR:
-            assert(major_started);
-            major_started = 0;
-            majors++;
+            assert(tmp_counters->major_started);
+            tmp_counters->major_started = 0;
+            tmp_counters->majors++;
             break;
         case EV_COMPACT_MAIN:
-            assert(compact_started);
-            compact_started = 0;
-            compacts++;
+            assert(tmp_counters->compact_started);
+            tmp_counters->compact_started = 0;
+            tmp_counters->compacts++;
             break;
     }
 }
@@ -66,17 +69,18 @@ value get_event_counts(void) {
     }
 
     struct caml_eventring_callbacks callbacks = { 0 };
+    struct counters tmp_counters = { 0 };
 
     callbacks.ev_begin = ev_begin;
     callbacks.ev_end = ev_end;
 
-    int read_events = caml_eventring_read_poll(cursor, &callbacks);
+    int read_events = caml_eventring_read_poll(cursor, &callbacks, &tmp_counters);
 
-    Field(counts_tuple, 0) = Val_long(minors);
-    Field(counts_tuple, 1) = Val_long(majors);
-    Field(counts_tuple, 2) = Val_long(compacts);
+    Field(counts_tuple, 0) = Val_long(tmp_counters.minors);
+    Field(counts_tuple, 1) = Val_long(tmp_counters.majors);
+    Field(counts_tuple, 2) = Val_long(tmp_counters.compacts);
 
     caml_eventring_free_cursor(cursor);
 
-    CAMLreturn(counts_tuple);   
+    CAMLreturn(counts_tuple);
 }

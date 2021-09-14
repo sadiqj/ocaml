@@ -27,7 +27,11 @@ typedef enum {
     EV_COUNTER,
     EV_ALLOC,
     EV_FLUSH
-} ev_type;
+} ev_message_type;
+
+typedef enum {
+    EV_GC
+} ev_event_type;
 
 typedef enum {
     EV_START,

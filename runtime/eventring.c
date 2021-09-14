@@ -461,7 +461,10 @@ int caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
 
     if (ring_head > cursor->current_pos)
     {
-      callbacks->ev_lost_events(ring_head - cursor->current_pos);
+      if( callbacks->ev_lost_events ) 
+      {
+        callbacks->ev_lost_events(ring_head - cursor->current_pos);
+      }
       cursor->current_pos = ring_head;
     }
 
@@ -488,7 +491,10 @@ int caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
       {
         /* It potentially has, retry for the next one after we've notified
              the callbacks about lost messages. */
-        callbacks->ev_lost_events(ring_head - cursor->current_pos);
+        if( callbacks->ev_lost_events )
+        {
+          callbacks->ev_lost_events(ring_head - cursor->current_pos);
+        }
         cursor->current_pos = ring_head;
         break;
       }

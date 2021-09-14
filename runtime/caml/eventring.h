@@ -30,9 +30,9 @@
 struct caml_eventring_cursor;
 
 struct caml_eventring_callbacks {
-    void (*ev_begin)(void* callback_data, uint64_t timestamp, ev_gc_phase phase);
-    void (*ev_end)(void* callback_data, uint64_t timestamp, ev_gc_phase phase);
-    void (*ev_counter)(void* callback_data, uint64_t timestamp, ev_gc_counter counter, uint64_t val);
+    void (*ev_runtime_begin)(void* callback_data, uint64_t timestamp, ev_runtime_phase phase);
+    void (*ev_runtime_end)(void* callback_data, uint64_t timestamp, ev_runtime_phase phase);
+    void (*ev_runtime_counter)(void* callback_data, uint64_t timestamp, ev_runtime_counter counter, uint64_t val);
     void (*ev_alloc)(void* callback_data, uint64_t timestamp, uint64_t* sz);
     void (*ev_lifecycle)(void* callback_data, int64_t timestamp, ev_lifecycle lifecycle);
     void (*ev_lost_events)(void* callback_data, int lost_events);
@@ -67,9 +67,9 @@ void caml_eventring_init();
 void caml_eventring_destroy();
 void caml_eventring_pause();
 void caml_eventring_resume();
-void caml_ev_begin(ev_gc_phase phase);
-void caml_ev_end(ev_gc_phase phase);
-void caml_ev_counter(ev_gc_counter counter, uint64_t val);
+void caml_ev_begin(ev_runtime_phase phase);
+void caml_ev_end(ev_runtime_phase phase);
+void caml_ev_counter(ev_runtime_counter counter, uint64_t val);
 void caml_ev_alloc(uint64_t sz);
 void caml_ev_alloc_flush();
 void caml_ev_flush();

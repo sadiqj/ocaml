@@ -72,7 +72,7 @@ typedef enum {
     EV_MINOR_UPDATE_WEAK,
     EV_MINOR_FINALIZED,
     EV_EXPLICIT_GC_MAJOR_SLICE
-} ev_gc_phase;
+} ev_runtime_phase;
 
 typedef enum {
     EV_C_ALLOC_JUMP,
@@ -93,7 +93,7 @@ typedef enum {
     EV_C_REQUEST_MINOR_REALLOC_REF_TABLE,
     EV_C_REQUEST_MINOR_REALLOC_EPHE_REF_TABLE,
     EV_C_REQUEST_MINOR_REALLOC_CUSTOM_TABLE
-} ev_gc_counter;
+} ev_runtime_counter;
 
 #ifdef CAML_INSTR
 #define CAML_INSTR_DO(f) if (Caml_state->eventlog_enabled &&\
@@ -116,7 +116,7 @@ void caml_eventlog_init(void);
 void caml_eventlog_disable(void);
 void caml_ev_begin(ev_gc_phase phase);
 void caml_ev_end(ev_gc_phase phase);
-void caml_ev_counter(ev_gc_counter counter, uint64_t val);
+void caml_ev_counter(ev_runtime_phase counter, uint64_t val);
 void caml_ev_alloc(uint64_t size);
 void caml_ev_alloc_flush(void);
 void caml_ev_flush(void);

@@ -21,7 +21,7 @@ void start_eventring() {
     caml_eventring_start();
 }
 
-void ev_begin(void* callback_data, uint64_t timestamp, ev_gc_phase phase) {
+void ev_begin(void* callback_data, uint64_t timestamp, ev_runtime_phase phase) {
     struct counters* tmp_counters = (struct counters*)callback_data;
     switch( phase ) {
         case EV_MINOR:
@@ -36,7 +36,7 @@ void ev_begin(void* callback_data, uint64_t timestamp, ev_gc_phase phase) {
     }
 }
 
-void ev_end(void* callback_data, uint64_t timestamp, ev_gc_phase phase) {
+void ev_end(void* callback_data, uint64_t timestamp, ev_runtime_phase phase) {
     struct counters* tmp_counters = (struct counters*)callback_data;
     switch( phase ) {
         case EV_MINOR:
@@ -71,8 +71,8 @@ value get_event_counts(void) {
     struct caml_eventring_callbacks callbacks = { 0 };
     struct counters tmp_counters = { 0 };
 
-    callbacks.ev_begin = ev_begin;
-    callbacks.ev_end = ev_end;
+    callbacks.ev_runtime_begin = ev_begin;
+    callbacks.ev_runtime_end = ev_end;
 
     int read_events = caml_eventring_read_poll(cursor, &callbacks, &tmp_counters);
 

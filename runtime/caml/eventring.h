@@ -30,12 +30,12 @@
 struct caml_eventring_cursor;
 
 struct caml_eventring_callbacks {
-    void (*ev_begin)(uint64_t timestamp, ev_gc_phase phase);
-    void (*ev_end)(uint64_t timestamp, ev_gc_phase phase);
-    void (*ev_counter)(uint64_t timestamp, ev_gc_counter counter, uint64_t val);
-    void (*ev_alloc)(uint64_t timestamp, uint64_t* sz);
-    void (*ev_lifecycle)(int64_t timestamp, ev_lifecycle lifecycle);
-    void (*ev_lost_events)(int lost_events);
+    void (*ev_begin)(void* callback_data, uint64_t timestamp, ev_gc_phase phase);
+    void (*ev_end)(void* callback_data, uint64_t timestamp, ev_gc_phase phase);
+    void (*ev_counter)(void* callback_data, uint64_t timestamp, ev_gc_counter counter, uint64_t val);
+    void (*ev_alloc)(void* callback_data, uint64_t timestamp, uint64_t* sz);
+    void (*ev_lifecycle)(void* callback_data, int64_t timestamp, ev_lifecycle lifecycle);
+    void (*ev_lost_events)(void* callback_data, int lost_events);
 };
 
 /* Starts eventring. Needs to be called before [caml_eventring_create_cursor] */
@@ -56,7 +56,8 @@ CAMLextern void caml_eventring_free_cursor(struct caml_eventring_cursor* cursor)
     provided in [callbacks] for each new event. Returns the number of events
     consumed. */
 CAMLextern int caml_eventring_read_poll(struct caml_eventring_cursor* cursor,
-                             struct caml_eventring_callbacks* callbacks);
+                             struct caml_eventring_callbacks* callbacks,
+                             void* callback_data);
 
 /* TODO: OCaml API for reading from the eventring */
 

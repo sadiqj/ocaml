@@ -116,7 +116,7 @@ static int64_t time_counter(void)
 #endif
 }
 
-static void write_to_ring(ev_category category, ev_type type, int event_id, int event_length, uint64_t *content, int word_offset);
+static void write_to_ring(ev_category category, ev_message_type type, int event_id, int event_length, uint64_t *content, int word_offset);
 
 static void teardown_eventring(void)
 {
@@ -128,7 +128,7 @@ static void teardown_eventring(void)
   ring_header = NULL;
 }
 
-void caml_eventring_init() 
+void caml_eventring_init()
 {
   eventring_path = caml_secure_getenv(T("OCAML_EVENTRING_PATH"));
 
@@ -149,7 +149,7 @@ void caml_eventring_destroy()
 }
 
 void caml_eventring_start()
-{ 
+{
   if( !ring_ptr ) {
     int ring_fd, ret;
 
@@ -218,7 +218,7 @@ void caml_eventring_resume()
 }
 
 
-static void write_to_ring(ev_category category, ev_type type, int event_id, int event_length, uint64_t *content, int word_offset)
+static void write_to_ring(ev_category category, ev_message_type type, int event_id, int event_length, uint64_t *content, int word_offset)
 {
   /* account for header and timestamp */
   uint64_t actual_length = event_length + 2;
@@ -350,7 +350,7 @@ void caml_ev_flush()
 
 CAMLprim value caml_eventlog_resume(value v)
 {
-  if( Caml_state->eventlog_enabled && Caml_state->eventlog_paused ) { 
+  if( Caml_state->eventlog_enabled && Caml_state->eventlog_paused ) {
     write_to_ring(EV_RUNTIME, EV_LIFECYCLE, EV_RESUME, 0, NULL, 0);
     Caml_state->eventlog_paused = 0;
   }
@@ -443,7 +443,8 @@ void caml_eventring_free_cursor(struct caml_eventring_cursor *cursor)
     provided in [callbacks] for each new event. Returns the number of events
     consumed. */
 int caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
-                             struct caml_eventring_callbacks *callbacks)
+                             struct caml_eventring_callbacks *callbacks,
+                             void* callback_data)
 {
   int events_consumed = 0;
   uint64_t ring_head, ring_tail;
@@ -461,9 +462,9 @@ int caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
 
     if (ring_head > cursor->current_pos)
     {
-      if( callbacks->ev_lost_events ) 
+      if( callbacks->ev_lost_events )
       {
-        callbacks->ev_lost_events(ring_head - cursor->current_pos);
+        callbacks->ev_lost_events(callback_data, ring_head - cursor->current_pos);
       }
       cursor->current_pos = ring_head;
     }
@@ -493,7 +494,7 @@ int caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
              the callbacks about lost messages. */
         if( callbacks->ev_lost_events )
         {
-          callbacks->ev_lost_events(ring_head - cursor->current_pos);
+          callbacks->ev_lost_events(callback_data, ring_head - cursor->current_pos);
         }
         cursor->current_pos = ring_head;
         break;
@@ -504,31 +505,31 @@ int caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
       case EV_BEGIN:
         if (callbacks->ev_begin)
         {
-          callbacks->ev_begin(buf[1], RING_ITEM_ID(header));
+          callbacks->ev_begin(callback_data, buf[1], RING_ITEM_ID(header));
         }
         break;
       case EV_EXIT:
         if (callbacks->ev_begin)
         {
-          callbacks->ev_end(buf[1], RING_ITEM_ID(header));
+          callbacks->ev_end(callback_data, buf[1], RING_ITEM_ID(header));
         }
         break;
       case EV_COUNTER:
         if (callbacks->ev_counter)
         {
-          callbacks->ev_counter(buf[1], buf[2], RING_ITEM_ID(header));
+          callbacks->ev_counter(callback_data, buf[1], buf[2], RING_ITEM_ID(header));
         }
         break;
       case EV_ALLOC:
         if (callbacks->ev_alloc)
         {
-          callbacks->ev_alloc(buf[1], &buf[2]);
+          callbacks->ev_alloc(callback_data, buf[1], &buf[2]);
         }
         break;
       case EV_LIFECYCLE:
         if (callbacks->ev_lifecycle)
         {
-          callbacks->ev_lifecycle(buf[1], RING_ITEM_ID(header));
+          callbacks->ev_lifecycle(callback_data, buf[1], RING_ITEM_ID(header));
         }
       }
 

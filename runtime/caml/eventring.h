@@ -54,7 +54,8 @@ CAMLextern void caml_eventring_free_cursor(struct caml_eventring_cursor* cursor)
 
 /* polls the eventring pointed to by [cursor] and calls the appropriate callback
     provided in [callbacks] for each new event. Returns the number of events
-    consumed. */
+    consumed. [callback_data] is an optional pointer that can be passed to
+    each callback. */
 CAMLextern int caml_eventring_read_poll(struct caml_eventring_cursor* cursor,
                              struct caml_eventring_callbacks* callbacks,
                              void* callback_data);

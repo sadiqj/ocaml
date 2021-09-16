@@ -221,19 +221,25 @@ void caml_eventring_resume()
 static void write_to_ring(ev_category category, ev_message_type type, int event_id, int event_length, uint64_t *content, int word_offset)
 {
   /* account for header and timestamp */
-  uint64_t actual_length = event_length + 2;
+  uint64_t length_with_header_ts = event_length + 2;
   uint64_t ring_head = atomic_load_explicit(&ring_header->ring_head, memory_order_acquire);
   uint64_t ring_tail = atomic_load_explicit(&ring_header->ring_tail, memory_order_acquire);
   uint64_t ring_tail_offset = ring_tail % ring_header->ring_size;
   uint64_t ring_distance_to_end = ring_header->ring_size - ring_tail_offset;
+  uint64_t padding_required = 0;
 
   /* length must be less than 2^10 */
   CAMLassert(event_length < (1 << 10));
   /* Runtime event with type EV_INTERNAL and id 0 is reserved for padding */
   CAMLassert(!(category == EV_RUNTIME && type == EV_INTERNAL && event_id == 0));
 
+  // Work out if padding is required
+  if( ring_distance_to_end < length_with_header_ts ) {
+    padding_required = ring_distance_to_end;
+  }
+
   // First we check if a write would take us over the head
-  while ((ring_tail + actual_length) - ring_head >= RING_BUFFER_SIZE)
+  while ((ring_tail + length_with_header_ts + padding_required) - ring_head >= RING_BUFFER_SIZE)
   {
     // The write would over-write some old bit of data. Need to advance the head.
     uint64_t head_header = ring_ptr[ring_head % ring_header->ring_size];
@@ -243,7 +249,7 @@ static void write_to_ring(ev_category category, ev_message_type type, int event_
     atomic_store_explicit(&ring_header->ring_head, ring_head, memory_order_release); // advance the ring head
   }
 
-  if (ring_distance_to_end < event_length)
+  if ( padding_required > 0 )
   {
     ring_ptr[ring_tail_offset] = (ring_distance_to_end << 50); // Padding header with size ring_distance_to_end
                                                                // Readers will skip the message and go straight
@@ -257,13 +263,13 @@ static void write_to_ring(ev_category category, ev_message_type type, int event_
   }
 
   // Write header
-  ring_ptr[ring_tail_offset++] = (((uint64_t)actual_length) << 54) | ((category == EV_RUNTIME) ? 0 : (1ULL << 53)) | ((uint64_t)type) << 49 | ((uint64_t)event_id) << 36;
+  ring_ptr[ring_tail_offset++] = (((uint64_t)length_with_header_ts) << 54) | ((category == EV_RUNTIME) ? 0 : (1ULL << 53)) | ((uint64_t)type) << 49 | ((uint64_t)event_id) << 36;
   ring_ptr[ring_tail_offset++] = time_counter();
   if (content != NULL)
   {
     memcpy(&ring_ptr[ring_tail_offset], content + word_offset, event_length * sizeof(uint64_t));
   }
-  atomic_store_explicit(&ring_header->ring_tail, ring_tail + actual_length, memory_order_release);
+  atomic_store_explicit(&ring_header->ring_tail, ring_tail + length_with_header_ts, memory_order_release);
 }
 
 /* Functions for putting runtime data on to the eventring */

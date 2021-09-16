@@ -617,39 +617,74 @@ CAMLprim value caml_eventring_free_wrapped_cursor(value wrapped_cursor) {
   CAMLreturn0;
 };
 
-/*
-struct caml_eventring_callbacks {
-    void (*ev_runtime_begin)(void* callback_data, uint64_t timestamp, ev_runtime_phase phase);
-    void (*ev_runtime_end)(void* callback_data, uint64_t timestamp, ev_runtime_phase phase);
-    void (*ev_runtime_counter)(void* callback_data, uint64_t timestamp, ev_runtime_counter counter, uint64_t val);
-    void (*ev_alloc)(void* callback_data, uint64_t timestamp, uint64_t* sz);
-    void (*ev_lifecycle)(void* callback_data, int64_t timestamp, ev_lifecycle lifecycle);
-    void (*ev_lost_events)(void* callback_data, int lost_events);
-};
-*/
+/*  ev_begin: int64 -> gc_phase -> unit;
+    ev_end: int64 -> gc_phase -> unit;
+    ev_counter: int64 -> gc_counter -> int64 -> unit;
+    ev_alloc: int64 -> int64 list -> unit;
+    ev_lifecycle: int64 -> ev_lifecycle;
+    ev_lost_events: int */
 
 static void runtime_begin(void* callback_data, uint64_t timestamp, ev_runtime_phase phase) {
+  CAMLparam0();
+  CAMLlocal4(callbacks, callback_option, callback_func, ts_val);
 
+
+  callbacks = *(value*)callback_data;
+
+  callback_option = Field(callbacks, 0);
+
+  if( Is_some(callback_option) ) {
+    callback_func = Field(callback_option, 0);
+
+    
+  }
+
+  CAMLreturn0;
 }
 
 static void runtime_end(void* callback_data, uint64_t timestamp, ev_runtime_phase phase) {
+  CAMLparam0();
+  CAMLlocal1(callbacks);
 
+  callbacks = *(value*)callback_data;
+
+  CAMLreturn0;
 }
 
 static void runtime_counter(void* callback_data, uint64_t timestamp, ev_runtime_counter counter, uint64_t val) {
+  CAMLparam0();
+  CAMLlocal1(callbacks);
 
+  callbacks = *(value*)callback_data;
+
+  CAMLreturn0;
 }
 
 static void alloc(void* callback_data, uint64_t timestamp, uint64_t* sz) {
+  CAMLparam0();
+  CAMLlocal1(callbacks);
 
+  callbacks = *(value*)callback_data;
+
+  CAMLreturn0;
 }
 
 static void lifecycle(void* callback_data, int64_t timestamp, ev_lifecycle lifecycle) {
+  CAMLparam0();
+  CAMLlocal1(callbacks);
 
+  callbacks = *(value*)callback_data;
+
+  CAMLreturn0;
 }
 
 static void lost_events(void* callback_data, int lost_events) {
+  CAMLparam0();
+  CAMLlocal1(callbacks);
 
+  callbacks = *(value*)callback_data;
+
+  CAMLreturn0;
 }
 
 static struct caml_eventring_callbacks local_callbacks = {
@@ -670,5 +705,7 @@ CAMLprim value caml_eventring_read_poll_wrapped(value wrapped_cursor, value call
       caml_failwith("Invalid or closed cursor");
     }
 
-    caml_eventring_read_poll(cursor, &local_callbacks, callbacks);
+    int events_read = caml_eventring_read_poll(cursor, &local_callbacks, &callbacks);
+
+
 };

@@ -251,7 +251,7 @@ static void write_to_ring(ev_category category, ev_message_type type, int event_
 
   if ( padding_required > 0 )
   {
-    ring_ptr[ring_tail_offset] = (ring_distance_to_end << 50); // Padding header with size ring_distance_to_end
+    ring_ptr[ring_tail_offset] = (ring_distance_to_end << 54); // Padding header with size ring_distance_to_end
                                                                // Readers will skip the message and go straight
                                                                // to the beginning of the ring.
 

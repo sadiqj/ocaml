@@ -71,6 +71,6 @@ type callbacks = {
 }
 
 external start : unit -> unit = "caml_eventring_start"
-external create_cursor : string -> int -> cursor = "caml_eventring_create_wrapped_cursor"
+external create_cursor : (string * int) option -> cursor = "caml_eventring_create_wrapped_cursor"
 external free_cursor : cursor -> unit = "caml_eventring_free_wrapped_cursor"
 external read_poll : cursor -> callbacks -> int = "caml_eventring_read_poll_wrapped"

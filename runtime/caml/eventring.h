@@ -70,8 +70,7 @@ CAMLextern int caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
                          void *callback_data);
 
 /* OCaml API for reading from the eventring */
-extern value caml_eventring_create_wrapped_cursor(value eventring_path,
-                                                  value pid);
+extern value caml_eventring_create_wrapped_cursor(value path_pid);
 extern value caml_eventring_free_wrapped_cursor(value wrapped_cursor);
 extern value caml_eventring_read_poll_wrapped(value wrapped_cursor,
                                               value callbacks);

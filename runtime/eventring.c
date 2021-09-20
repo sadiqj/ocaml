@@ -385,6 +385,11 @@ caml_eventring_create_cursor(const char *eventring_path, int pid) {
 
   eventring_loc = caml_stat_alloc(RING_FILE_NAME_LEN);
 
+  if( pid < 0 ) 
+  {
+    pid = getpid();
+  }
+
   /* TODO: We should do something more sensible here and avoid duplicating
   with earlier code. */
   if (eventring_path) {
@@ -549,17 +554,26 @@ static struct custom_operations cursor_operations = {
     custom_serialize_default,   custom_deserialize_default,
     custom_compare_ext_default, custom_fixed_length_default};
 
-CAMLprim value caml_eventring_create_wrapped_cursor(value eventring_path,
-                                                    value pid) {
+CAMLprim value caml_eventring_create_wrapped_cursor(value path_pid_option) {
   CAMLparam0();
   CAMLlocal1(wrapper);
   struct caml_eventring_cursor *cursor;
+  int pid;
+  const char* path;
 
   wrapper = caml_alloc_custom(&cursor_operations,
                               sizeof(struct caml_eventring_cursor *), 0, 1);
 
+  if( Is_some(path_pid_option) ) {
+    path = String_val(Field(path_pid_option,0));
+    pid = Int_val(Field(path_pid_option,1));
+  } else {
+    path = NULL;
+    pid = -1;
+  }
+
   cursor =
-      caml_eventring_create_cursor(String_val(eventring_path), Int_val(pid));
+      caml_eventring_create_cursor(path, pid);
 
   if (cursor == NULL) {
     // TODO: Raise an actual exception here
@@ -581,7 +595,7 @@ CAMLprim value caml_eventring_free_wrapped_cursor(value wrapped_cursor) {
     Cursor_val(wrapped_cursor) = NULL;
   }
 
-  CAMLreturn0;
+  CAMLreturn(Val_unit);
 };
 
 CAMLprim value caml_eventring_read_poll_wrapped(value wrapped_cursor,
@@ -615,7 +629,7 @@ CAMLprim value caml_eventring_read_poll_wrapped(value wrapped_cursor,
       tmp_callback = Field(callbacks, 5); /* lost_events */
 
       if (Is_some(tmp_callback)) {
-        caml_callback(tmp_callback, Int_val(num_lost_events));
+        caml_callback(tmp_callback, Val_long(num_lost_events));
       }
     }
 
@@ -647,7 +661,7 @@ CAMLprim value caml_eventring_read_poll_wrapped(value wrapped_cursor,
 
         tmp_callback = Field(callbacks, 5); /* lost_events */
         if (Is_some(tmp_callback)) {
-          caml_callback(tmp_callback, Int_val(num_lost_events));
+          caml_callback(tmp_callback, Val_long(num_lost_events));
         }
 
         break;
@@ -660,18 +674,18 @@ CAMLprim value caml_eventring_read_poll_wrapped(value wrapped_cursor,
         tmp_callback = Field(callbacks, 0); /* ev_runtime_begin */
         if (Is_some(tmp_callback)) {
           ts_val = caml_copy_int64(buf[1]);
-          msg_type = RING_ITEM_ID(header);
+          msg_type = Val_long(RING_ITEM_ID(header));
 
-          caml_callback2(tmp_callback, ts_val, msg_type);
+          caml_callback2(Field(tmp_callback,0), ts_val, msg_type);
         }
         break;
       case EV_EXIT:
         tmp_callback = Field(callbacks, 1); /* ev_runtime_end */
         if (Is_some(tmp_callback)) {
           ts_val = caml_copy_int64(buf[1]);
-          msg_type = RING_ITEM_ID(header);
+          msg_type = Val_long(RING_ITEM_ID(header));
 
-          caml_callback2(tmp_callback, ts_val, msg_type);
+          caml_callback2(Field(tmp_callback,0), ts_val, msg_type);
         }
         break;
       case EV_COUNTER:
@@ -679,9 +693,9 @@ CAMLprim value caml_eventring_read_poll_wrapped(value wrapped_cursor,
         if (Is_some(tmp_callback)) {
           ts_val = caml_copy_int64(buf[1]);
           counter_val = caml_copy_int64(buf[2]);
-          msg_type = RING_ITEM_ID(header);
+          msg_type = Val_long(RING_ITEM_ID(header));
 
-          caml_callback3(tmp_callback, ts_val, counter_val, msg_type);
+          caml_callback3(Field(tmp_callback,0), ts_val, counter_val, msg_type);
         }
         break;
       case EV_ALLOC:
@@ -691,7 +705,7 @@ CAMLprim value caml_eventring_read_poll_wrapped(value wrapped_cursor,
 
           ts_val = caml_copy_int64(buf[1]);
           counter_val = caml_copy_int64(buf[2]);
-          msg_type = RING_ITEM_ID(header);
+          msg_type = Val_long(RING_ITEM_ID(header));
 
           alloc_val = caml_alloc(NUM_ALLOC_BUCKETS, 0);
 
@@ -699,16 +713,16 @@ CAMLprim value caml_eventring_read_poll_wrapped(value wrapped_cursor,
             Store_field(alloc_val, i, Val_long(buf[2 + i]));
           }
 
-          caml_callback2(tmp_callback, ts_val, alloc_val);
+          caml_callback2(Field(tmp_callback,0), ts_val, alloc_val);
         }
         break;
       case EV_LIFECYCLE:
         tmp_callback = Field(callbacks, 4); /* ev_runtime_end */
         if (Is_some(tmp_callback)) {
           ts_val = caml_copy_int64(buf[1]);
-          msg_type = RING_ITEM_ID(header);
+          msg_type = Val_long(RING_ITEM_ID(header));
 
-          caml_callback2(tmp_callback, ts_val, msg_type);
+          caml_callback2(Field(tmp_callback,0), ts_val, msg_type);
         }
         break;
       }

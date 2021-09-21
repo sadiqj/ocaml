@@ -200,18 +200,22 @@ CAMLprim value caml_eventring_start() {
   return Val_unit;
 }
 
-void caml_eventring_pause() {
+value caml_eventring_pause() {
   if (Caml_state->eventlog_enabled && !Caml_state->eventlog_paused) {
     caml_ev_lifecycle(EV_RING_PAUSE, 0);
     Caml_state->eventlog_paused = 1;
   }
+
+  return Val_unit;
 }
 
-void caml_eventring_resume() {
+value caml_eventring_resume() {
   if (Caml_state->eventlog_enabled && Caml_state->eventlog_paused) {
     caml_ev_lifecycle(EV_RING_RESUME, 0);
     Caml_state->eventlog_paused = 0;
   }
+
+  return Val_unit;
 }
 
 static void write_to_ring(ev_category category, ev_message_type type,

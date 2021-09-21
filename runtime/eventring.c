@@ -608,7 +608,7 @@ CAMLprim value caml_eventring_free_wrapped_cursor(value wrapped_cursor) {
 CAMLprim value caml_eventring_read_poll_wrapped(value wrapped_cursor,
                                                 value callbacks) {
   CAMLparam2(wrapped_cursor, callbacks);
-  CAMLlocal5(tmp_callback, ts_val, msg_type, counter_val, alloc_val);
+  CAMLlocal5(tmp_callback, ts_val, msg_type, counter_val, misc_val);
 
   int events_consumed = 0;
   uint64_t ring_head, ring_tail;
@@ -683,7 +683,7 @@ CAMLprim value caml_eventring_read_poll_wrapped(value wrapped_cursor,
           ts_val = caml_copy_int64(buf[1]);
           msg_type = Val_long(RING_ITEM_ID(header));
 
-          caml_callback2(Field(tmp_callback,0), ts_val, msg_type);
+          caml_callback2(Some_val(tmp_callback), ts_val, msg_type);
         }
         break;
       case EV_EXIT:
@@ -692,7 +692,7 @@ CAMLprim value caml_eventring_read_poll_wrapped(value wrapped_cursor,
           ts_val = caml_copy_int64(buf[1]);
           msg_type = Val_long(RING_ITEM_ID(header));
 
-          caml_callback2(Field(tmp_callback,0), ts_val, msg_type);
+          caml_callback2(Some_val(tmp_callback), ts_val, msg_type);
         }
         break;
       case EV_COUNTER:
@@ -702,7 +702,7 @@ CAMLprim value caml_eventring_read_poll_wrapped(value wrapped_cursor,
           counter_val = caml_copy_int64(buf[2]);
           msg_type = Val_long(RING_ITEM_ID(header));
 
-          caml_callback3(Field(tmp_callback,0), ts_val, counter_val, msg_type);
+          caml_callback3(Some_val(tmp_callback), ts_val, counter_val, msg_type);
         }
         break;
       case EV_ALLOC:
@@ -714,22 +714,28 @@ CAMLprim value caml_eventring_read_poll_wrapped(value wrapped_cursor,
           counter_val = caml_copy_int64(buf[2]);
           msg_type = Val_long(RING_ITEM_ID(header));
 
-          alloc_val = caml_alloc(NUM_ALLOC_BUCKETS, 0);
+          misc_val = caml_alloc(NUM_ALLOC_BUCKETS, 0);
 
           for (i = 0; i < NUM_ALLOC_BUCKETS; i++) {
-            Store_field(alloc_val, i, Val_long(buf[2 + i]));
+            Store_field(misc_val, i, Val_long(buf[2 + i]));
           }
 
-          caml_callback2(Field(tmp_callback,0), ts_val, alloc_val);
+          caml_callback2(Some_val(tmp_callback), ts_val, misc_val);
         }
         break;
       case EV_LIFECYCLE:
-        tmp_callback = Field(callbacks, 4); /* ev_runtime_end */
+        tmp_callback = Field(callbacks, 4); /* ev_lifecycle */
         if (Is_some(tmp_callback)) {
           ts_val = caml_copy_int64(buf[1]);
           msg_type = Val_long(RING_ITEM_ID(header));
+          if( buf[2] != 0 ) {
+            misc_val = caml_alloc(1, 0);
+            Store_field(misc_val, 0, Val_long(buf[2]));
+          } else {
+            misc_val = Val_none;
+          }
 
-          caml_callback2(Field(tmp_callback,0), ts_val, msg_type);
+          caml_callback3(Some_val(tmp_callback), ts_val, msg_type, misc_val);
         }
         break;
       }

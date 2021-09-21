@@ -8,6 +8,19 @@ let majors = ref 0
 let minors = ref 0
 let compacts = ref 0
 
+let got_start = ref false
+
+let lifecycle ts lifecycle_event data =
+    match lifecycle_event with
+    | EV_START ->
+        begin
+            assert(match data with
+            | Some(pid) -> true
+            | None -> false);
+            got_start := true
+        end
+    | _ -> ()
+
 let runtime_begin ts phase =
     match phase with
     | EV_MAJOR ->
@@ -61,8 +74,9 @@ let () =
         ev_runtime_end = Some(runtime_end);
         ev_runtime_counter = None;
         ev_alloc = None;
-        ev_lifecycle = None;
+        ev_lifecycle = Some(lifecycle);
         ev_lost_events = None
     } in 
     ignore(read_poll cursor callbacks);
+    assert(!got_start);
     Printf.printf "minors: %d, majors: %d, compact: %d\n" !minors !majors !compacts

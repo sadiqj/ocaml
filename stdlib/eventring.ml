@@ -66,7 +66,7 @@ type callbacks = {
     ev_runtime_end: (int64 -> gc_phase -> unit) option;
     ev_runtime_counter: (int64 -> gc_counter -> int64 -> unit) option;
     ev_alloc: (int64 -> int array -> unit) option;
-    ev_lifecycle: (int64 -> ev_lifecycle) option;
+    ev_lifecycle: (int64 -> ev_lifecycle -> int option -> unit) option;
     ev_lost_events: (int -> unit) option
 }
 

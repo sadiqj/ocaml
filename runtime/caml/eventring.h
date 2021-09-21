@@ -54,6 +54,9 @@ struct caml_eventring_callbacks {
 /* Starts eventring. Needs to be called before [caml_eventring_create_cursor] */
 extern value caml_eventring_start();
 
+extern value caml_eventring_pause();
+extern value caml_eventring_resume();
+
 /* [eventring_path] is a path to a directory containing eventrings. [pid] is the
     process id (or equivalent) of the startup OCaml process. This function will
     return a cursor which can we be used with caml_eventring_read_poll to read
@@ -83,8 +86,6 @@ extern value caml_eventring_read_poll_wrapped(value wrapped_cursor,
 
 void caml_eventring_init();
 void caml_eventring_destroy();
-void caml_eventring_pause();
-void caml_eventring_resume();
 void caml_ev_begin(ev_runtime_phase phase);
 void caml_ev_end(ev_runtime_phase phase);
 void caml_ev_counter(ev_runtime_counter counter, uint64_t val);

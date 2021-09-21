@@ -137,7 +137,7 @@ void caml_eventring_init() {
 
 void caml_eventring_destroy() {
   if (ring_ptr) {
-    write_to_ring(EV_RUNTIME, EV_LIFECYCLE, EV_STOP, 0, NULL, 0);
+    write_to_ring(EV_RUNTIME, EV_LIFECYCLE, EV_RING_STOP, 0, NULL, 0);
 
     Caml_state->eventlog_enabled = 0;
 
@@ -192,7 +192,7 @@ CAMLprim value caml_eventring_start() {
     Caml_state->eventlog_enabled = 1;
     Caml_state->eventlog_paused = 0;
 
-    write_to_ring(EV_RUNTIME, EV_LIFECYCLE, EV_START, 0, NULL, 0);
+    caml_ev_lifecycle(EV_RING_START, Caml_state->eventlog_startup_pid);
 
     atexit(&teardown_eventring);
   }
@@ -202,14 +202,14 @@ CAMLprim value caml_eventring_start() {
 
 void caml_eventring_pause() {
   if (Caml_state->eventlog_enabled && !Caml_state->eventlog_paused) {
-    write_to_ring(EV_RUNTIME, EV_LIFECYCLE, EV_PAUSE, 0, NULL, 0);
+    caml_ev_lifecycle(EV_RING_PAUSE, 0);
     Caml_state->eventlog_paused = 1;
   }
 }
 
 void caml_eventring_resume() {
   if (Caml_state->eventlog_enabled && Caml_state->eventlog_paused) {
-    write_to_ring(EV_RUNTIME, EV_LIFECYCLE, EV_RESUME, 0, NULL, 0);
+    caml_ev_lifecycle(EV_RING_RESUME, 0);
     Caml_state->eventlog_paused = 0;
   }
 }
@@ -299,6 +299,13 @@ void caml_ev_counter(ev_runtime_counter counter, uint64_t val) {
   }
 }
 
+void caml_ev_lifecycle(ev_lifecycle lifecycle, int64_t data) {
+  if (Caml_state->eventlog_enabled && !Caml_state->eventlog_paused &&
+      ring_ptr != NULL) {
+    write_to_ring(EV_LIFECYCLE, EV_LIFECYCLE, lifecycle, 1, (uint64_t*)&data, 0);
+  }
+}
+
 #define NUM_ALLOC_BUCKETS 20
 static uint64_t alloc_buckets[NUM_ALLOC_BUCKETS] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
@@ -347,7 +354,7 @@ void caml_ev_flush() {
 
 CAMLprim value caml_eventlog_resume(value v) {
   if (Caml_state->eventlog_enabled && Caml_state->eventlog_paused) {
-    write_to_ring(EV_RUNTIME, EV_LIFECYCLE, EV_RESUME, 0, NULL, 0);
+    write_to_ring(EV_RUNTIME, EV_LIFECYCLE, EV_RING_RESUME, 0, NULL, 0);
     Caml_state->eventlog_paused = 0;
   }
   return Val_unit;
@@ -355,7 +362,7 @@ CAMLprim value caml_eventlog_resume(value v) {
 
 CAMLprim value caml_eventlog_pause(value v) {
   if (Caml_state->eventlog_enabled && !Caml_state->eventlog_paused) {
-    write_to_ring(EV_RUNTIME, EV_LIFECYCLE, EV_PAUSE, 0, NULL, 0);
+    write_to_ring(EV_RUNTIME, EV_LIFECYCLE, EV_RING_PAUSE, 0, NULL, 0);
     Caml_state->eventlog_paused = 1;
   }
   return Val_unit;
@@ -518,7 +525,7 @@ int caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
         break;
       case EV_LIFECYCLE:
         if (callbacks->ev_lifecycle) {
-          callbacks->ev_lifecycle(callback_data, buf[1], RING_ITEM_ID(header));
+          callbacks->ev_lifecycle(callback_data, buf[1], RING_ITEM_ID(header), buf[2]);
         }
       }
 

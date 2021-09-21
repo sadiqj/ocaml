@@ -702,10 +702,10 @@ CAMLprim value caml_eventring_read_poll_wrapped(value wrapped_cursor,
         tmp_callback = Field(callbacks, 2); /* ev_runtime_counter */
         if (Is_some(tmp_callback)) {
           ts_val = caml_copy_int64(buf[1]);
-          counter_val = caml_copy_int64(buf[2]);
+          counter_val = Val_long(buf[2]);
           msg_type = Val_long(RING_ITEM_ID(header));
 
-          caml_callback3(Some_val(tmp_callback), ts_val, counter_val, msg_type);
+          caml_callback3(Some_val(tmp_callback), ts_val, msg_type, counter_val);
         }
         break;
       case EV_ALLOC:

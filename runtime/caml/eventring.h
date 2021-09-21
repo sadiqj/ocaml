@@ -22,6 +22,7 @@
 #define CAML_EVENTRING_INIT() caml_eventring_init()
 #define CAML_EV_BEGIN(p) caml_ev_begin(p)
 #define CAML_EV_END(p) caml_ev_end(p)
+#define CAML_EV_LIFECYCLE(p, data) caml_ev_lifecycle(p, data)
 #define CAML_EV_COUNTER(c, v) caml_ev_counter(c, v)
 #ifdef CAML_INSTR
 #define CAML_EV_ALLOC(s) caml_ev_alloc(s)
@@ -45,7 +46,7 @@ struct caml_eventring_callbacks {
                              ev_runtime_counter counter, uint64_t val);
   void (*ev_alloc)(void *callback_data, uint64_t timestamp, uint64_t *sz);
   void (*ev_lifecycle)(void *callback_data, int64_t timestamp,
-                       ev_lifecycle lifecycle);
+                       ev_lifecycle lifecycle, int64_t data);
   void (*ev_lost_events)(void *callback_data, int lost_events);
 };
 
@@ -86,6 +87,7 @@ void caml_eventring_resume();
 void caml_ev_begin(ev_runtime_phase phase);
 void caml_ev_end(ev_runtime_phase phase);
 void caml_ev_counter(ev_runtime_counter counter, uint64_t val);
+void caml_ev_lifecycle(ev_lifecycle lifecycle, int64_t data);
 void caml_ev_alloc(uint64_t sz);
 void caml_ev_alloc_flush();
 void caml_ev_flush();

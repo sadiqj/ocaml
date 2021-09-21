@@ -34,10 +34,14 @@ typedef enum {
 } ev_event_type;
 
 typedef enum {
-    EV_START,
-    EV_STOP,
-    EV_PAUSE,
-    EV_RESUME
+    EV_RING_START,
+    EV_RING_STOP,
+    EV_RING_PAUSE,
+    EV_RING_RESUME,
+    EV_FORK_PARENT,
+    EV_FORK_CHILD,
+    EV_DOMAIN_SPAWN,
+    EV_DOMAIN_TERMINATE
 } ev_lifecycle;
 
 typedef enum {

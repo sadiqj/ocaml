@@ -518,8 +518,7 @@ int caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
         break;
       case EV_COUNTER:
         if (callbacks->ev_runtime_counter) {
-          callbacks->ev_runtime_counter(callback_data, buf[1], buf[2],
-                                        RING_ITEM_ID(header));
+          callbacks->ev_runtime_counter(callback_data, buf[1], RING_ITEM_ID(header), buf[2]);
         }
         break;
       case EV_ALLOC:

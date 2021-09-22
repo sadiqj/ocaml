@@ -122,6 +122,7 @@ static void teardown_eventring(void) {
   // We should only preserve the eventring if the OCAMLRUNPARAM
   // parameter tells us to do so
   munmap(ring_header, ring_total_file_size);
+  unlink(ring_buffer_loc);
 
   ring_ptr = NULL;
   ring_header = NULL;

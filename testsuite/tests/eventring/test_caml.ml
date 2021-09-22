@@ -77,6 +77,6 @@ let () =
         ev_lifecycle = Some(lifecycle);
         ev_lost_events = None
     } in 
-    ignore(read_poll cursor callbacks Some(1000));
+    ignore(read_poll cursor callbacks (Some 1000));
     assert(!got_start);
     Printf.printf "minors: %d, majors: %d, compact: %d\n" !minors !majors !compacts

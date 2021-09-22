@@ -45,7 +45,7 @@
 #endif
 
 #define RING_FILE_NAME_LEN 4096
-#define RING_BUFFER_SIZE (1 << 18)
+#define RING_BUFFER_SIZE (1 << 24)
 #define MAX_MSG_LENGTH (1 << 10)
 
 typedef enum { EV_RUNTIME, EV_USER } ev_category;

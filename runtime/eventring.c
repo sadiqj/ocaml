@@ -200,7 +200,7 @@ CAMLprim value caml_eventring_start() {
   return Val_unit;
 }
 
-value caml_eventring_pause() {
+CAMLprim value caml_eventring_pause() {
   if (Caml_state->eventlog_enabled && !Caml_state->eventlog_paused) {
     caml_ev_lifecycle(EV_RING_PAUSE, 0);
     Caml_state->eventlog_paused = 1;
@@ -209,7 +209,7 @@ value caml_eventring_pause() {
   return Val_unit;
 }
 
-value caml_eventring_resume() {
+CAMLprim value caml_eventring_resume() {
   if (Caml_state->eventlog_enabled && Caml_state->eventlog_paused) {
     caml_ev_lifecycle(EV_RING_RESUME, 0);
     Caml_state->eventlog_paused = 0;
@@ -440,7 +440,7 @@ caml_eventring_create_cursor(const char *eventring_path, int pid) {
 void caml_eventring_free_cursor(struct caml_eventring_cursor *cursor) {
   if (cursor->cursor_open) {
     cursor->cursor_open = 0;
-    munmap(ring_header, cursor->ring_total_file_size);
+    munmap(cursor->ring_header, cursor->ring_total_file_size);
     caml_stat_free(cursor);
   }
 }

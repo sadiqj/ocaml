@@ -53,7 +53,6 @@ struct caml_eventring_callbacks {
 
 /* Starts eventring. Needs to be called before [caml_eventring_create_cursor] */
 extern value caml_eventring_start();
-
 extern value caml_eventring_pause();
 extern value caml_eventring_resume();
 

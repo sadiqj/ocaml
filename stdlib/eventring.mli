@@ -73,4 +73,4 @@ type callbacks = {
 val start : unit -> unit
 val create_cursor : (string * int) option -> cursor
 val free_cursor : cursor -> unit
-val read_poll : cursor -> callbacks -> int
+val read_poll : cursor -> callbacks -> int option -> int

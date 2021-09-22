@@ -446,11 +446,14 @@ void caml_eventring_free_cursor(struct caml_eventring_cursor *cursor) {
 }
 
 /* polls the eventring pointed to by [cursor] and calls the appropriate callback
-    provided in [callbacks] for each new event. Returns the number of events
-    consumed. */
+    provided in [callbacks] for each new event up to at most [max_events] times. 
+    Returns the number of events consumed.
+    
+    0 or negative [max_events] indicates no limit to the number of callbacks. */
 int caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
                              struct caml_eventring_callbacks *callbacks,
-                             void *callback_data) {
+                             void *callback_data,
+                             int max_events) {
   int events_consumed = 0;
   uint64_t ring_head, ring_tail;
 
@@ -541,7 +544,8 @@ int caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
 
   } 
   while (ring_tail < 
-    atomic_load_explicit(&ring_header->ring_tail, memory_order_acquire));
+    atomic_load_explicit(&ring_header->ring_tail, memory_order_acquire)
+  && (max_events <= 0 || events_consumed < max_events));
 
   return events_consumed;
 }
@@ -609,11 +613,13 @@ CAMLprim value caml_eventring_free_wrapped_cursor(value wrapped_cursor) {
 };
 
 CAMLprim value caml_eventring_read_poll_wrapped(value wrapped_cursor,
-                                                value callbacks) {
+                                                value callbacks,
+                                                value max_events_val) {
   CAMLparam2(wrapped_cursor, callbacks);
   CAMLlocal5(tmp_callback, ts_val, msg_type, counter_val, misc_val);
 
   int events_consumed = 0;
+  int max_events = Long_val(max_events_val);
   uint64_t ring_head, ring_tail;
   struct caml_eventring_cursor *cursor = Cursor_val(wrapped_cursor);
 
@@ -749,7 +755,8 @@ CAMLprim value caml_eventring_read_poll_wrapped(value wrapped_cursor,
     }
 
   } while (ring_tail <
-           atomic_load_explicit(&ring_header->ring_tail, memory_order_acquire));
+           atomic_load_explicit(&ring_header->ring_tail, memory_order_acquire)
+          && (max_events <= 0 || events_consumed < max_events));
 
   CAMLreturn(Int_val(events_consumed));
 };

@@ -67,18 +67,21 @@ extern struct caml_eventring_cursor* caml_eventring_create_cursor(const char *ev
 extern void caml_eventring_free_cursor(struct caml_eventring_cursor *cursor);
 
 /* polls the eventring pointed to by [cursor] and calls the appropriate callback
-    provided in [callbacks] for each new event. Returns the number of events
-    consumed. [callback_data] is an optional pointer that can be passed to
-    each callback. */
+    provided in [callbacks] for each new event up to at most [max_events] times. 
+    Returns the number of events consumed.
+    
+    0 or negative [max_events] indicates no limit to the number of callbacks. */
 CAMLextern int caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
                          struct caml_eventring_callbacks *callbacks,
-                         void *callback_data);
+                         void *callback_data,
+                         int max_events);
 
 /* OCaml API for reading from the eventring */
 extern value caml_eventring_create_wrapped_cursor(value path_pid);
 extern value caml_eventring_free_wrapped_cursor(value wrapped_cursor);
 extern value caml_eventring_read_poll_wrapped(value wrapped_cursor,
-                                              value callbacks);
+                                              value callbacks,
+                                              value max_events_option);
 
 #ifdef CAML_INTERNALS
 

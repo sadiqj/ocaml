@@ -74,7 +74,7 @@ value get_event_counts(void) {
     callbacks.ev_runtime_begin = ev_begin;
     callbacks.ev_runtime_end = ev_end;
 
-    int read_events = caml_eventring_read_poll(cursor, &callbacks, &tmp_counters);
+    int read_events = caml_eventring_read_poll(cursor, &callbacks, &tmp_counters, 0);
 
     Field(counts_tuple, 0) = Val_long(tmp_counters.minors);
     Field(counts_tuple, 1) = Val_long(tmp_counters.majors);

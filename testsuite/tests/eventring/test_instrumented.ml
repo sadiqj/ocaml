@@ -34,5 +34,5 @@ let () =
         ev_lifecycle = None;
         ev_lost_events = None
     } in 
-    ignore(read_poll cursor callbacks);
+    ignore(read_poll cursor callbacks None);
     Printf.printf "total_sizes: %d, total_promoted: %d\n" !total_sizes !total_promoted

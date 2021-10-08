@@ -358,6 +358,8 @@ void caml_empty_minor_heap (void)
   uintnat prev_alloc_words;
   struct caml_ephe_ref_elt *re;
 
+  CAML_EV_BEGIN(EV_MINOR);
+
   if (Caml_state->young_ptr != Caml_state->young_alloc_end){
     CAMLassert_young_header(*(header_t*)Caml_state->young_ptr);
     if (caml_minor_gc_begin_hook != NULL) (*caml_minor_gc_begin_hook) ();
@@ -415,6 +417,8 @@ void caml_empty_minor_heap (void)
     }
     CAML_EV_END(EV_MINOR_UPDATE_WEAK);
     CAML_EV_BEGIN(EV_MINOR_FINALIZED);
+    CAML_EV_COUNTER (EV_C_MINOR_ALLOCATED, 
+      Caml_state->young_alloc_end - Caml_state->young_ptr);
     Caml_state->stat_minor_words +=
       Caml_state->young_alloc_end - Caml_state->young_ptr;
     caml_gc_clock +=
@@ -439,6 +443,8 @@ void caml_empty_minor_heap (void)
     /* The minor heap is empty nothing to do. */
     caml_final_empty_young ();
   }
+  
+  CAML_EV_END(EV_MINOR);
 #ifdef DEBUG
   {
     value *p;
@@ -485,12 +491,10 @@ void caml_gc_dispatch (void)
   }
   if (Caml_state->requested_minor_gc) {
     /* reset the pointers first because the end hooks might allocate */
-    CAML_EV_BEGIN(EV_MINOR);
     Caml_state->requested_minor_gc = 0;
     Caml_state->young_trigger = Caml_state->young_alloc_mid;
     caml_update_young_limit();
     caml_empty_minor_heap ();
-    CAML_EV_END(EV_MINOR);
   }
   if (Caml_state->requested_major_slice) {
     Caml_state->requested_major_slice = 0;

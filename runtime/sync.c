@@ -26,7 +26,7 @@
 #include "caml/memory.h"
 
 #include "caml/sync.h"
-#include "caml/eventlog.h"
+#include "caml/eventring.h"
 
 /* Mutex operations */
 

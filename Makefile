@@ -1165,7 +1165,6 @@ distclean: clean
 	rm -f Makefile.config Makefile.build_config
 	rm -rf autom4te.cache flexdll-sources
 	rm -f config.log config.status libtool
-	rm -f tools/eventlog_metadata
 	rm -f tools/*.bak
 	rm -f testsuite/_log*
 

@@ -109,6 +109,10 @@ be called from C \\
 "Semaphore" & p.~\stdpageref{Semaphore} & semaphores \\
 "Effect" & p.~\stdpageref{Effect} & deep and shallow effect handlers \\
 \end{tabular}
+\subsubsection*{sss:stdlib-tracing}{Tracing:}
+\begin{tabular}{lll}
+"Eventring" & p.~\stdpageref{Eventring} & runtime event tracing \\
+\end{tabular}
 \subsubsection*{sss:stdlib-misc}{Misc:}
 \begin{tabular}{lll}
 "Fun" & p.~\stdpageref{Fun} & function values \\
@@ -134,6 +138,7 @@ be called from C \\
 \stddocitem{Effect}{deep and shallow effect handlers}
 \stddocitem{Either}{either values}
 \stddocitem{Ephemeron}{Ephemerons and weak hash table}
+\stddocitem{Eventring}{Runtime event tracing}
 \stddocitem{Filename}{operations on file names}
 \stddocitem{Float}{floating-point numbers}
 \stddocitem{Format}{pretty printing}

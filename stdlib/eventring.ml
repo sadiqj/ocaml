@@ -1,6 +1,6 @@
 (* Eventring *)
 
-type gc_counter = 
+type gc_counter =
     EV_C_ALLOC_JUMP
 |	EV_C_FORCE_MINOR_ALLOC_SMALL
 |	EV_C_FORCE_MINOR_MAKE_VECT
@@ -62,12 +62,12 @@ type ev_lifecycle =
 type cursor
 
 type callbacks = {
-    ev_runtime_begin: (int64 -> gc_phase -> unit) option;
-    ev_runtime_end: (int64 -> gc_phase -> unit) option;
-    ev_runtime_counter: (int64 -> gc_counter -> int -> unit) option;
-    ev_alloc: (int64 -> int array -> unit) option;
-    ev_lifecycle: (int64 -> ev_lifecycle -> int option -> unit) option;
-    ev_lost_events: (int -> unit) option
+    ev_runtime_begin: (int -> int64 -> gc_phase -> unit) option;
+    ev_runtime_end: (int -> int64 -> gc_phase -> unit) option;
+    ev_runtime_counter: (int -> int64 -> gc_counter -> int -> unit) option;
+    ev_alloc: (int -> int64 -> int array -> unit) option;
+    ev_lifecycle: (int -> int64 -> ev_lifecycle -> int option -> unit) option;
+    ev_lost_events: (int -> int -> unit) option
 }
 
 external start : unit -> unit = "caml_eventring_start"

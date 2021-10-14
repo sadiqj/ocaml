@@ -44,17 +44,26 @@
 #include <time.h>
 #endif
 
+#define MAX_DOMAINS 1
 #define RING_FILE_NAME_LEN 4096
-#define RING_BUFFER_SIZE (1 << 18)
+#define DEFAULT_RING_BUFFER_SIZE (1 << 20)
 #define MAX_MSG_LENGTH (1 << 10)
 
 typedef enum { EV_RUNTIME, EV_USER } ev_category;
 
-struct ring_buffer_header {
+struct ring_buffer {
+  atomic_uint_fast64_t ring_head;
+  atomic_uint_fast64_t ring_tail;
+  uint64_t data_offset; /* Offset from this struct to ring buffer's data */
+};
+
+struct metadata_header {
   uint64_t version;
-  atomic_uint_fast64_t ring_size; /* Ring size in 64-bit elements */
-  atomic_uint_fast64_t ring_tail; /* New messages are written at the tail */
-  atomic_uint_fast64_t ring_head; /* The oldest message starts at the head */
+  uint64_t max_domains;
+  uint64_t
+      ring_with_header_size_bytes; /* Ring data plus header size in bytes */
+  uint64_t ring_size_elements;     /* Ring size in 64-bit elements */
+  uint64_t first_ring_offset; /* Offset from this struct to first ring buffer */
 };
 
 /* event header fields (for runtime events):
@@ -69,11 +78,12 @@ event id (13 bits)
 #define RING_ITEM_ID(header) (((header) >> 36) & ((1UL << 13) - 1))
 
 static char *eventring_path;
-static struct ring_buffer_header *ring_header = NULL;
-static uint64_t *ring_ptr = NULL;
-static char *ring_buffer_loc = NULL;
-static size_t ring_total_file_size =
-    RING_BUFFER_SIZE * sizeof(uint64_t) + sizeof(struct ring_buffer_header);
+static struct metadata_header *current_metadata = NULL;
+static char *current_ring_buffer_loc = NULL;
+static int current_ring_total_size;
+
+static uintnat eventring_enabled = 0;
+static uintnat eventring_paused = 0;
 
 static int64_t time_counter(void) {
 #ifdef _WIN32
@@ -118,16 +128,6 @@ static void write_to_ring(ev_category category, ev_message_type type,
                           int event_id, int event_length, uint64_t *content,
                           int word_offset);
 
-static void teardown_eventring(void) {
-  // We should only preserve the eventring if the OCAMLRUNPARAM
-  // parameter tells us to do so
-  munmap(ring_header, ring_total_file_size);
-  unlink(ring_buffer_loc);
-
-  ring_ptr = NULL;
-  ring_header = NULL;
-}
-
 void caml_eventring_init() {
   eventring_path = caml_secure_getenv(T("OCAML_EVENTRING_PATH"));
 
@@ -136,87 +136,126 @@ void caml_eventring_init() {
   }
 }
 
-void caml_eventring_destroy() {
-  if (ring_ptr) {
-    write_to_ring(EV_RUNTIME, EV_LIFECYCLE, EV_RING_STOP, 0, NULL, 0);
+static void teardown_eventring() {
+    munmap(current_metadata, current_ring_total_size);
+    unlink(current_ring_buffer_loc);
 
-    Caml_state->eventlog_enabled = 0;
+    current_metadata = NULL;
+
+    eventring_enabled =  0;
+}
+
+void caml_eventring_destroy() {
+  if (eventring_enabled) {
+    write_to_ring(EV_RUNTIME, EV_LIFECYCLE, EV_RING_STOP, 0, NULL, 0);
 
     teardown_eventring();
   }
 }
 
-CAMLprim value caml_eventring_start() {
-  if (!ring_ptr) {
+static void
+create_and_start_ring_buffers() {
+  /* Only do this on one domain */
     int ring_fd, ret;
+    long int pid;
 
-    ring_buffer_loc = caml_stat_alloc(RING_FILE_NAME_LEN);
+    current_ring_buffer_loc = caml_stat_alloc(RING_FILE_NAME_LEN);
 
-    Caml_state->eventlog_startup_pid = getpid();
+    pid = getpid();
 
     if (eventring_path) {
-      snprintf_os(ring_buffer_loc, RING_FILE_NAME_LEN, T("%s/%ld.eventring"),
-                  eventring_path, Caml_state->eventlog_startup_pid);
+      snprintf_os(current_ring_buffer_loc, RING_FILE_NAME_LEN,
+                  T("%s/%ld.eventring"), eventring_path, pid);
     } else {
-      snprintf_os(ring_buffer_loc, RING_FILE_NAME_LEN, T("%ld.eventring"),
-                  Caml_state->eventlog_startup_pid);
+      snprintf_os(current_ring_buffer_loc, RING_FILE_NAME_LEN,
+                  T("%ld.eventring"), pid);
     }
 
-    ring_total_file_size =
-        RING_BUFFER_SIZE * sizeof(uint64_t) + sizeof(struct ring_buffer_header);
+    current_ring_total_size =
+        MAX_DOMAINS * (DEFAULT_RING_BUFFER_SIZE * sizeof(uint64_t) +
+                       sizeof(struct ring_buffer)) +
+        sizeof(struct metadata_header);
 
-    ring_fd = open(ring_buffer_loc, O_RDWR | O_CREAT, (S_IRUSR | S_IWUSR));
-    caml_stat_free(ring_buffer_loc);
+    ring_fd =
+        open(current_ring_buffer_loc, O_RDWR | O_CREAT, (S_IRUSR | S_IWUSR));
+    caml_stat_free(current_ring_buffer_loc);
 
     if (ring_fd < 0) {
-      caml_fatal_error("Couldn't open ring buffer loc: %s", ring_buffer_loc);
+      caml_fatal_error("Couldn't open ring buffer loc: %s",
+                       current_ring_buffer_loc);
     }
 
-    ret = ftruncate(ring_fd, ring_total_file_size);
+    ret = ftruncate(ring_fd, current_ring_total_size);
 
     if (ret < 0) {
       caml_fatal_error("Can't resize ring buffer");
     }
 
-    ring_header = mmap(NULL, ring_total_file_size, PROT_READ | PROT_WRITE,
-                       MAP_SHARED, ring_fd, 0);
+    current_metadata = mmap(NULL, current_ring_total_size,
+                            PROT_READ | PROT_WRITE, MAP_SHARED, ring_fd, 0);
 
-    ring_ptr = (uint64_t *)(ring_header + 1);
+    current_metadata->version = 1;
+    current_metadata->max_domains = MAX_DOMAINS;
+    current_metadata->ring_with_header_size_bytes =
+        DEFAULT_RING_BUFFER_SIZE * sizeof(uint64_t) +
+        sizeof(struct ring_buffer);
+    current_metadata->ring_size_elements = DEFAULT_RING_BUFFER_SIZE;
+    current_metadata->first_ring_offset = sizeof(struct metadata_header);
 
-    ring_header->version = 1;
-    ring_header->ring_size = RING_BUFFER_SIZE;
-    ring_header->ring_head = 0;
-    ring_header->ring_tail = 0;
+    for (int domain_num = 0; domain_num < MAX_DOMAINS; domain_num++) {
+      struct ring_buffer *ring_buffer =
+          (struct ring_buffer
+               *)((char *)current_metadata +
+                  current_metadata->first_ring_offset +
+                  domain_num * current_metadata->ring_with_header_size_bytes);
+
+      ring_buffer->ring_head = 0;
+      ring_buffer->ring_tail = 0;
+      ring_buffer->data_offset = sizeof(struct ring_buffer);
+    }
 
     close(ring_fd);
 
-    Caml_state->eventlog_enabled = 1;
-    Caml_state->eventlog_paused = 0;
+    eventring_enabled =  1;
+    eventring_paused =  0;
 
-    caml_ev_lifecycle(EV_RING_START, Caml_state->eventlog_startup_pid);
+    caml_ev_lifecycle(EV_RING_START, pid);
+}
 
-    atexit(&teardown_eventring);
-  }
+CAMLprim value caml_eventring_start() {
+  create_and_start_ring_buffers();
 
   return Val_unit;
 }
 
+/* TODO: Should this be a STW? */
 CAMLprim value caml_eventring_pause() {
-  if (Caml_state->eventlog_enabled && !Caml_state->eventlog_paused) {
+  if (eventring_enabled &&
+      !eventring_paused) {
     caml_ev_lifecycle(EV_RING_PAUSE, 0);
-    Caml_state->eventlog_paused = 1;
+    eventring_paused =  1;
   }
 
   return Val_unit;
 }
 
+/* TODO: Should this be a STW? */
 CAMLprim value caml_eventring_resume() {
-  if (Caml_state->eventlog_enabled && Caml_state->eventlog_paused) {
+  if (eventring_enabled &&
+      eventring_paused) {
     caml_ev_lifecycle(EV_RING_RESUME, 0);
-    Caml_state->eventlog_paused = 0;
+    eventring_paused =  0;
   }
 
   return Val_unit;
+}
+
+struct ring_buffer *get_ring_buffer_by_domain_id(int domain_id) {
+  return (
+      struct ring_buffer *)((char *)current_metadata +
+                            current_metadata->first_ring_offset +
+                            domain_id *
+                                current_metadata->ring_with_header_size_bytes);
 }
 
 static void write_to_ring(ev_category category, ev_message_type type,
@@ -224,13 +263,25 @@ static void write_to_ring(ev_category category, ev_message_type type,
                           int word_offset) {
   /* account for header and timestamp */
   uint64_t length_with_header_ts = event_length + 2;
-  uint64_t ring_head =
-      atomic_load_explicit(&ring_header->ring_head, memory_order_acquire);
-  uint64_t ring_tail =
-      atomic_load_explicit(&ring_header->ring_tail, memory_order_acquire);
-  uint64_t ring_tail_offset = ring_tail % ring_header->ring_size;
-  uint64_t ring_distance_to_end = ring_header->ring_size - ring_tail_offset;
+
+  struct ring_buffer *domain_ring_buffer =
+      get_ring_buffer_by_domain_id(0);
+
+  uint64_t *ring_ptr = (uint64_t *)((char *)domain_ring_buffer +
+                                    domain_ring_buffer->data_offset);
+
+  uint64_t ring_head = atomic_load_explicit(&domain_ring_buffer->ring_head,
+                                            memory_order_acquire);
+  uint64_t ring_tail = atomic_load_explicit(&domain_ring_buffer->ring_tail,
+                                            memory_order_acquire);
+
+  uint64_t ring_mask = current_metadata->ring_size_elements - 1;
+  uint64_t ring_tail_offset = ring_tail & ring_mask;
+  uint64_t ring_distance_to_end =
+      current_metadata->ring_size_elements - ring_tail_offset;
   uint64_t padding_required = 0;
+
+  uint64_t timestamp = time_counter();
 
   /* length must be less than 2^10 */
   CAMLassert(event_length < MAX_MSG_LENGTH);
@@ -238,65 +289,72 @@ static void write_to_ring(ev_category category, ev_message_type type,
   CAMLassert(!(category == EV_RUNTIME && type == EV_INTERNAL && event_id == 0));
 
   // Work out if padding is required
-  if( ring_distance_to_end < length_with_header_ts ) {
+  if (ring_distance_to_end < length_with_header_ts) {
     padding_required = ring_distance_to_end;
   }
 
   // First we check if a write would take us over the head
-  while ((ring_tail + length_with_header_ts + padding_required) - ring_head >= RING_BUFFER_SIZE)
-  {
-    // The write would over-write some old bit of data. Need to advance the head.
-    uint64_t head_header = ring_ptr[ring_head % ring_header->ring_size];
+  while ((ring_tail + length_with_header_ts + padding_required) - ring_head >=
+         DEFAULT_RING_BUFFER_SIZE) {
+    // The write would over-write some old bit of data. Need to advance the
+    // head.
+    uint64_t head_header = ring_ptr[ring_head & ring_mask];
 
     ring_head += RING_ITEM_LENGTH(head_header);
 
-    atomic_store_explicit(&ring_header->ring_head, ring_head,
+    atomic_store_explicit(&domain_ring_buffer->ring_head, ring_head,
                           memory_order_release); // advance the ring head
   }
 
-  if ( padding_required > 0 )
-  {
-    ring_ptr[ring_tail_offset] = (ring_distance_to_end << 54); // Padding header with size ring_distance_to_end
-                                                               // Readers will skip the message and go straight
-                                                               // to the beginning of the ring.
+  if (padding_required > 0) {
+    ring_ptr[ring_tail_offset] =
+        (ring_distance_to_end
+         << 54); // Padding header with size ring_distance_to_end
+                 // Readers will skip the message and go straight
+                 // to the beginning of the ring.
 
     ring_tail += ring_distance_to_end;
 
-    atomic_store_explicit(&ring_header->ring_tail, ring_tail,
+    atomic_store_explicit(&domain_ring_buffer->ring_tail, ring_tail,
                           memory_order_release);
 
     ring_tail_offset = 0;
   }
 
   // Write header
-  ring_ptr[ring_tail_offset++] = (((uint64_t)length_with_header_ts) << 54) | ((category == EV_RUNTIME) ? 0 : (1ULL << 53)) | ((uint64_t)type) << 49 | ((uint64_t)event_id) << 36;
-  ring_ptr[ring_tail_offset++] = time_counter();
+  ring_ptr[ring_tail_offset++] = (((uint64_t)length_with_header_ts) << 54) |
+                                 ((category == EV_RUNTIME) ? 0 : (1ULL << 53)) |
+                                 ((uint64_t)type) << 49 |
+                                 ((uint64_t)event_id) << 36;
+  ring_ptr[ring_tail_offset++] = timestamp;
   if (content != NULL) {
     memcpy(&ring_ptr[ring_tail_offset], content + word_offset,
            event_length * sizeof(uint64_t));
   }
-  atomic_store_explicit(&ring_header->ring_tail, ring_tail + length_with_header_ts, memory_order_release);
+  atomic_store_explicit(&domain_ring_buffer->ring_tail,
+                        ring_tail + length_with_header_ts,
+                        memory_order_release);
 }
 
 /* Functions for putting runtime data on to the eventring */
 
 void caml_ev_begin(ev_runtime_phase phase) {
-  if (Caml_state->eventlog_enabled && !Caml_state->eventlog_paused &&
-      ring_ptr != NULL) {
+  if (eventring_enabled &&
+      !eventring_paused) {
     write_to_ring(EV_RUNTIME, EV_BEGIN, phase, 0, NULL, 0);
   }
 }
 
 void caml_ev_end(ev_runtime_phase phase) {
-  if (Caml_state->eventlog_enabled && !Caml_state->eventlog_paused &&
-      ring_ptr != NULL) {
+  if (eventring_enabled &&
+      !eventring_paused) {
     write_to_ring(EV_RUNTIME, EV_EXIT, phase, 0, NULL, 0);
   }
 }
 
 void caml_ev_counter(ev_runtime_counter counter, uint64_t val) {
-  if (Caml_state->eventlog_enabled && !Caml_state->eventlog_paused &&
-      ring_ptr != NULL) {
+  if (eventring_enabled &&
+      !eventring_paused) {
     uint64_t buf[1];
     buf[0] = val;
 
@@ -305,9 +363,9 @@ void caml_ev_counter(ev_runtime_counter counter, uint64_t val) {
 }
 
 void caml_ev_lifecycle(ev_lifecycle lifecycle, int64_t data) {
-  if (Caml_state->eventlog_enabled && !Caml_state->eventlog_paused &&
-      ring_ptr != NULL) {
-    write_to_ring(EV_LIFECYCLE, EV_LIFECYCLE, lifecycle, 1, (uint64_t*)&data, 0);
+  if (eventring_enabled &&
+      !eventring_paused) {
+    write_to_ring(EV_RUNTIME, EV_LIFECYCLE, lifecycle, 1, (uint64_t *)&data, 0);
   }
 }
 
@@ -321,9 +379,9 @@ static uint64_t alloc_buckets[NUM_ALLOC_BUCKETS] = {
    flushed.
 */
 void caml_ev_alloc(uint64_t sz) {
-  if (!Caml_state->eventlog_enabled)
+  if (!eventring_enabled)
     return;
-  if (Caml_state->eventlog_paused)
+  if (eventring_paused)
     return;
 
   if (sz < (NUM_ALLOC_BUCKETS / 2)) {
@@ -341,9 +399,9 @@ void caml_ev_alloc(uint64_t sz) {
 void caml_ev_alloc_flush() {
   int i;
 
-  if (!Caml_state->eventlog_enabled)
+  if (!eventring_enabled)
     return;
-  if (Caml_state->eventlog_paused)
+  if (eventring_paused)
     return;
 
   write_to_ring(EV_RUNTIME, EV_ALLOC, 0, NUM_ALLOC_BUCKETS, alloc_buckets, 0);
@@ -357,28 +415,11 @@ void caml_ev_flush() {
   // This is a no-op for eventring
 }
 
-CAMLprim value caml_eventlog_resume(value v) {
-  if (Caml_state->eventlog_enabled && Caml_state->eventlog_paused) {
-    write_to_ring(EV_RUNTIME, EV_LIFECYCLE, EV_RING_RESUME, 0, NULL, 0);
-    Caml_state->eventlog_paused = 0;
-  }
-  return Val_unit;
-}
-
-CAMLprim value caml_eventlog_pause(value v) {
-  if (Caml_state->eventlog_enabled && !Caml_state->eventlog_paused) {
-    write_to_ring(EV_RUNTIME, EV_LIFECYCLE, EV_RING_PAUSE, 0, NULL, 0);
-    Caml_state->eventlog_paused = 1;
-  }
-  return Val_unit;
-}
-
 struct caml_eventring_cursor {
   int cursor_open;
-  uint64_t *ring_ptr;
-  struct ring_buffer_header *ring_header;
-  uint64_t current_pos;
-  size_t ring_total_file_size;
+  struct metadata_header *metadata;
+  uint64_t *current_positions;
+  size_t ring_file_size_bytes;
 };
 
 /* C-API for reading from an eventring */
@@ -392,18 +433,25 @@ caml_eventring_create_cursor(const char *eventring_path, int pid) {
   int ring_fd, ret;
   struct stat tmp_stat;
   struct caml_eventring_cursor *cursor =
-      caml_stat_alloc(sizeof(struct caml_eventring_cursor));
+      caml_stat_alloc_noexc(sizeof(struct caml_eventring_cursor));
   char *eventring_loc;
 
-  eventring_loc = caml_stat_alloc(RING_FILE_NAME_LEN);
+  if (cursor == NULL) {
+    // TODO: Log here?
+    return NULL;
+  }
 
-  if( pid < 0 ) 
-  {
+  eventring_loc = caml_stat_alloc_noexc(RING_FILE_NAME_LEN);
+
+  if (eventring_loc == NULL) {
+    // TODO: Log here?
+    return NULL;
+  }
+
+  if (pid < 0) {
     pid = getpid();
   }
 
-  /* TODO: We should do something more sensible here and avoid duplicating
-  with earlier code. */
   if (eventring_path) {
     ret = snprintf_os(eventring_loc, RING_FILE_NAME_LEN, T("%s/%d.eventring"),
                       eventring_path, pid);
@@ -413,8 +461,8 @@ caml_eventring_create_cursor(const char *eventring_path, int pid) {
   }
 
   if (ret < 0) {
-    /* TODO: We should report an error here.
-      Also free the cursor and eventring_loc. */
+    caml_stat_free(cursor);
+    caml_stat_free(eventring_loc);
     return 0;
   }
 
@@ -422,16 +470,19 @@ caml_eventring_create_cursor(const char *eventring_path, int pid) {
   ret = fstat(ring_fd, &tmp_stat);
 
   if (ret < 0) {
-    /* TODO: Should at least log what happened here.
-      Also free the cursor and eventring_loc. */
+    caml_stat_free(cursor);
+    caml_stat_free(eventring_loc);
     return 0;
   }
 
-  cursor->ring_total_file_size = tmp_stat.st_size;
-  cursor->ring_header = mmap(NULL, cursor->ring_total_file_size, PROT_READ,
-                             MAP_SHARED, ring_fd, 0);
-  cursor->ring_ptr = (uint64_t *)(ring_header + 1);
-  cursor->current_pos = 0;
+  cursor->ring_file_size_bytes = tmp_stat.st_size;
+  cursor->metadata = mmap(NULL, cursor->ring_file_size_bytes, PROT_READ,
+                          MAP_SHARED, ring_fd, 0);
+  cursor->current_positions =
+      caml_stat_alloc(cursor->metadata->max_domains * sizeof(uint64_t));
+  for (int j = 0; j < cursor->metadata->max_domains; j++) {
+    cursor->current_positions[j] = 0;
+  }
   cursor->cursor_open = 1;
 
   return cursor;
@@ -441,98 +492,117 @@ caml_eventring_create_cursor(const char *eventring_path, int pid) {
 void caml_eventring_free_cursor(struct caml_eventring_cursor *cursor) {
   if (cursor->cursor_open) {
     cursor->cursor_open = 0;
-    munmap(cursor->ring_header, cursor->ring_total_file_size);
+    munmap(cursor->metadata, cursor->ring_file_size_bytes);
+    caml_stat_free(cursor->current_positions);
     caml_stat_free(cursor);
   }
 }
 
 /* polls the eventring pointed to by [cursor] and calls the appropriate callback
-    provided in [callbacks] for each new event up to at most [max_events] times. 
+    provided in [callbacks] for each new event up to at most [max_events] times.
     Returns the number of events consumed.
-    
-    0 or negative [max_events] indicates no limit to the number of callbacks. */
-int caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
-                             struct caml_eventring_callbacks *callbacks,
-                             void *callback_data,
-                             int max_events) {
+
+    0 for [max_events] indicates no limit to the number of callbacks. */
+unsigned int caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
+                              struct caml_eventring_callbacks *callbacks,
+                              void *callback_data, unsigned int max_events) {
   int events_consumed = 0;
   uint64_t ring_head, ring_tail;
+  char *raw_header_ptr;
 
   if (!cursor->cursor_open) {
-    /* Should probably log something here as well */
+    /* TODO: Should probably log something here as well */
     return 0;
   }
 
-  do {
-    ring_head =
-        atomic_load_explicit(&ring_header->ring_head, memory_order_acquire);
-    ring_tail =
-        atomic_load_explicit(&ring_header->ring_tail, memory_order_acquire);
+  raw_header_ptr =
+      (char *)cursor->metadata + cursor->metadata->first_ring_offset;
 
-    if (ring_head > cursor->current_pos) {
-      if (callbacks->ev_lost_events) {
-        callbacks->ev_lost_events(callback_data,
-                                  ring_head - cursor->current_pos);
-      }
-      cursor->current_pos = ring_head;
-    }
+  for (int domain_num = 0; domain_num < cursor->metadata->max_domains;
+       domain_num++) {
 
-    while (cursor->current_pos < ring_tail) {
+    struct ring_buffer *ring_buffer_header =
+        (struct ring_buffer *)raw_header_ptr;
+    uint64_t *ring_ptr = (uint64_t *)((char *)ring_buffer_header +
+                                      ring_buffer_header->data_offset);
+
+    do {
       uint64_t buf[MAX_MSG_LENGTH];
-      uint64_t ring_size = ring_header->ring_size;
-      uint64_t header = ring_ptr[cursor->current_pos % ring_size];
+      uint64_t ring_mask, header, msg_length;
+      ring_head = atomic_load_explicit(&ring_buffer_header->ring_head,
+                                       memory_order_acquire);
+      ring_tail = atomic_load_explicit(&ring_buffer_header->ring_tail,
+                                       memory_order_acquire);
 
-      uint64_t msg_length = RING_ITEM_LENGTH(header);
+      if (ring_head > cursor->current_positions[domain_num]) {
+        if (callbacks->ev_lost_events) {
+          callbacks->ev_lost_events(domain_num,
+              callback_data, ring_head - cursor->current_positions[domain_num]);
+        }
+        cursor->current_positions[domain_num] = ring_head;
+      }
+
+      if( cursor->current_positions[domain_num] >= ring_tail ) {
+        break;
+      }
+
+      ring_mask = current_metadata->ring_size_elements - 1;
+      header = ring_ptr[cursor->current_positions[domain_num] & ring_mask];
+      msg_length = RING_ITEM_LENGTH(header);
 
       if (msg_length > MAX_MSG_LENGTH) {
         // TODO: fatal error here, the stream is corrupt or our position is
-        // wrong. Free buf
+        // wrong.
       }
 
-      memcpy(buf, ring_ptr + (cursor->current_pos % ring_size),
+      memcpy(buf,
+             ring_ptr + (cursor->current_positions[domain_num] & ring_mask),
              msg_length * sizeof(uint64_t));
 
-      ring_head =
-          atomic_load_explicit(&ring_header->ring_head, memory_order_acquire);
+      ring_head = atomic_load_explicit(&ring_buffer_header->ring_head,
+                                       memory_order_acquire);
 
       /* Check the message we've read hasn't been overwritten by the writer */
-      if (ring_head > cursor->current_pos) {
+      if (ring_head > cursor->current_positions[domain_num]) {
         /* It potentially has, retry for the next one after we've notified
              the callbacks about lost messages. */
+        int lost_events = ring_head - cursor->current_positions[domain_num];
+        cursor->current_positions[domain_num] = ring_head;
+
         if (callbacks->ev_lost_events) {
-          callbacks->ev_lost_events(callback_data,
-                                    ring_head - cursor->current_pos);
+          callbacks->ev_lost_events(domain_num, callback_data, lost_events);
         }
-        cursor->current_pos = ring_head;
         break;
       }
 
       switch (RING_ITEM_TYPE(header)) {
       case EV_BEGIN:
         if (callbacks->ev_runtime_begin) {
-          callbacks->ev_runtime_begin(callback_data, buf[1],
+          callbacks->ev_runtime_begin(domain_num, callback_data, buf[1],
                                       RING_ITEM_ID(header));
         }
         break;
       case EV_EXIT:
         if (callbacks->ev_runtime_end) {
-          callbacks->ev_runtime_end(callback_data, buf[1],
+          callbacks->ev_runtime_end(domain_num, callback_data, buf[1],
                                     RING_ITEM_ID(header));
         }
         break;
       case EV_COUNTER:
         if (callbacks->ev_runtime_counter) {
-          callbacks->ev_runtime_counter(callback_data, buf[1], RING_ITEM_ID(header), buf[2]);
+          callbacks->ev_runtime_counter(domain_num, callback_data, buf[1],
+                                        RING_ITEM_ID(header), buf[2]);
         }
         break;
       case EV_ALLOC:
         if (callbacks->ev_alloc) {
-          callbacks->ev_alloc(callback_data, buf[1], &buf[2]);
+          callbacks->ev_alloc(domain_num, callback_data, buf[1], &buf[2]);
         }
         break;
       case EV_LIFECYCLE:
         if (callbacks->ev_lifecycle) {
-          callbacks->ev_lifecycle(callback_data, buf[1], RING_ITEM_ID(header), buf[2]);
+          callbacks->ev_lifecycle(domain_num, callback_data, buf[1],
+                                  RING_ITEM_ID(header), buf[2]);
         }
       }
 
@@ -540,13 +610,15 @@ int caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
         events_consumed++;
       }
 
-      cursor->current_pos += msg_length;
-    }
+      cursor->current_positions[domain_num] += msg_length;
 
-  } 
-  while (ring_tail < 
-    atomic_load_explicit(&ring_header->ring_tail, memory_order_acquire)
-  && (max_events <= 0 || events_consumed < max_events));
+    /* There is an unfairness here. Under heavy load situations we might only
+    end up reading [max_events] from a single domain's ring. */
+    } while (cursor->current_positions[domain_num] < ring_tail &&
+             (max_events == 0 || events_consumed < max_events));
+
+    raw_header_ptr += cursor->metadata->ring_with_header_size_bytes;
+  }
 
   return events_consumed;
 }
@@ -574,24 +646,22 @@ CAMLprim value caml_eventring_create_wrapped_cursor(value path_pid_option) {
   CAMLlocal1(wrapper);
   struct caml_eventring_cursor *cursor;
   int pid;
-  const char* path;
+  const char *path;
 
   wrapper = caml_alloc_custom(&cursor_operations,
                               sizeof(struct caml_eventring_cursor *), 0, 1);
 
-  if( Is_some(path_pid_option) ) {
-    path = String_val(Field(path_pid_option,0));
-    pid = Int_val(Field(path_pid_option,1));
+  if (Is_some(path_pid_option)) {
+    path = String_val(Field(path_pid_option, 0));
+    pid = Int_val(Field(path_pid_option, 1));
   } else {
     path = NULL;
     pid = -1;
   }
 
-  cursor =
-      caml_eventring_create_cursor(path, pid);
+  cursor = caml_eventring_create_cursor(path, pid);
 
   if (cursor == NULL) {
-    // TODO: Raise an actual exception here
     caml_failwith("Could not obtain cursor");
   }
 
@@ -613,16 +683,141 @@ CAMLprim value caml_eventring_free_wrapped_cursor(value wrapped_cursor) {
   CAMLreturn(Val_unit);
 };
 
+static __thread value callbacks_root = Val_unit;
+
+static void ml_runtime_begin(int domain_id, void *callback_data,
+                            uint64_t timestamp, ev_runtime_phase phase) {
+  CAMLparam0();
+  CAMLlocal3(tmp_callback, ts_val, msg_type);
+
+  tmp_callback = Field(callbacks_root, 0); /* ev_runtime_begin */
+  if (Is_some(tmp_callback)) {
+    ts_val = caml_copy_int64(timestamp);
+    msg_type = Val_long(phase);
+
+    caml_callback3(Some_val(tmp_callback), Val_long(domain_id), ts_val, msg_type);
+  }
+
+  CAMLreturn0;
+}
+
+static void ml_runtime_end(int domain_id, void *callback_data,
+                          uint64_t timestamp, ev_runtime_phase phase) {
+  CAMLparam0();
+  CAMLlocal3(tmp_callback, ts_val, msg_type);
+
+  tmp_callback = Field(callbacks_root, 1); /* ev_runtime_end */
+  if (Is_some(tmp_callback)) {
+    ts_val = caml_copy_int64(timestamp);
+    msg_type = Val_long(phase);
+
+    caml_callback3(Some_val(tmp_callback), Val_long(domain_id), ts_val, msg_type);
+  }
+
+  CAMLreturn0;
+}
+
+static void ml_runtime_counter(int domain_id, void *callback_data,
+                              uint64_t timestamp, ev_runtime_counter counter,
+                              uint64_t val) {
+  CAMLparam0();
+  CAMLlocal1(tmp_callback);
+  CAMLlocalN(params, 4);
+
+  tmp_callback = Field(callbacks_root, 2); /* ev_runtime_counter */
+  if (Is_some(tmp_callback)) {
+    params[0] = Val_long(domain_id);
+    params[1] = caml_copy_int64(timestamp);
+    params[2] = Val_long(val);
+    params[3] = Val_long(counter);
+
+    caml_callbackN(Some_val(tmp_callback), 4, params);
+  }
+
+  CAMLreturn0;
+}
+
+static void ml_alloc(int domain_id, void *callback_data, uint64_t timestamp,
+                    uint64_t *sz) {
+  CAMLparam0();
+  CAMLlocal3(tmp_callback, ts_val, misc_val);
+
+  tmp_callback = Field(callbacks_root, 3); /* ev_alloc */
+  if (Is_some(tmp_callback)) {
+    int i;
+
+    ts_val = caml_copy_int64(timestamp);
+    misc_val = caml_alloc(NUM_ALLOC_BUCKETS, 0);
+
+    for (i = 0; i < NUM_ALLOC_BUCKETS; i++) {
+      Store_field(misc_val, i, Val_long(sz[i]));
+    }
+
+    caml_callback3(Some_val(tmp_callback), Val_long(domain_id), ts_val, misc_val);
+  }
+
+  CAMLreturn0;
+}
+
+static void ml_lifecycle(int domain_id, void *callback_data, int64_t timestamp,
+                         ev_lifecycle lifecycle, int64_t data) {
+  CAMLparam0();
+  CAMLlocal1(tmp_callback);
+  CAMLlocalN(params, 4);
+
+  tmp_callback = Field(callbacks_root, 4); /* ev_lifecycle */
+  if (Is_some(tmp_callback)) {
+    params[0] = Val_long(domain_id);
+    params[1] = caml_copy_int64(timestamp);
+    params[2] = Val_long(lifecycle);
+    if (data != 0) {
+      params[3] = caml_alloc(1, 0);
+      Store_field(params[3], 0, Val_long(data));
+    } else {
+      params[3] = Val_none;
+    }
+
+    caml_callbackN(Some_val(tmp_callback), 4, params);
+  }
+
+  CAMLreturn0;
+}
+
+static void ml_lost_events(int domain_id, void *callback_data, int lost_events){
+  CAMLparam0();
+  CAMLlocal1(tmp_callback);
+
+  tmp_callback = Field(callbacks_root, 5); /* lost_events */
+
+  if (Is_some(tmp_callback)) {
+    caml_callback2(Some_val(tmp_callback), Val_long(domain_id), Val_long(lost_events));
+  }
+
+  CAMLreturn0;
+}
+
+static struct caml_eventring_callbacks local_callbacks = {
+  ev_runtime_begin : ml_runtime_begin,
+  ev_runtime_end : ml_runtime_end,
+  ev_runtime_counter : ml_runtime_counter,
+  ev_alloc : ml_alloc,
+  ev_lifecycle : ml_lifecycle,
+  ev_lost_events : ml_lost_events
+};
+
 CAMLprim value caml_eventring_read_poll_wrapped(value wrapped_cursor,
-                                                value callbacks,
+                                                value callbacks_val,
                                                 value max_events_val) {
-  CAMLparam2(wrapped_cursor, callbacks);
+  CAMLparam2(wrapped_cursor, callbacks_val);
   CAMLlocal5(tmp_callback, ts_val, msg_type, counter_val, misc_val);
 
   int events_consumed = 0;
-  int max_events = Long_val(max_events_val);
-  uint64_t ring_head, ring_tail;
+  int max_events = Is_some(max_events_val) ? Some_val(max_events_val) : 0;
   struct caml_eventring_cursor *cursor = Cursor_val(wrapped_cursor);
+
+  callbacks_root = callbacks_val;
+
+  caml_register_generational_global_root(&callbacks_root);
 
   if (cursor == NULL) {
     caml_failwith("Invalid or closed cursor");
@@ -632,132 +827,10 @@ CAMLprim value caml_eventring_read_poll_wrapped(value wrapped_cursor,
     caml_failwith("Eventring cursor is not open");
   }
 
-  do {
-    ring_head =
-        atomic_load_explicit(&ring_header->ring_head, memory_order_acquire);
-    ring_tail =
-        atomic_load_explicit(&ring_header->ring_tail, memory_order_acquire);
+  events_consumed =
+      caml_eventring_read_poll(cursor, &local_callbacks, NULL, max_events);
 
-    if (ring_head > cursor->current_pos) {
-      /* We lost events here */
-      int num_lost_events = ring_head - cursor->current_pos;
-
-      cursor->current_pos = ring_head;
-      tmp_callback = Field(callbacks, 5); /* lost_events */
-
-      if (Is_some(tmp_callback)) {
-        caml_callback(tmp_callback, Val_long(num_lost_events));
-      }
-    }
-
-    while (cursor->current_pos < ring_tail) {
-      uint64_t buf[MAX_MSG_LENGTH];
-      uint64_t ring_size = ring_header->ring_size;
-      uint64_t header = ring_ptr[cursor->current_pos % ring_size];
-
-      uint64_t msg_length = RING_ITEM_LENGTH(header);
-
-      if (msg_length > MAX_MSG_LENGTH) {
-        caml_failwith(
-            "Message length greater than max length. Corrupt stream?");
-      }
-
-      memcpy(buf, ring_ptr + (cursor->current_pos % ring_size),
-             msg_length * sizeof(uint64_t));
-
-      ring_head =
-          atomic_load_explicit(&ring_header->ring_head, memory_order_acquire);
-
-      /* Check the message we've read hasn't been overwritten by the writer */
-      if (ring_head > cursor->current_pos) {
-        /* It potentially has, retry for the next one after we've notified
-             the callbacks about lost messages. */
-        int num_lost_events = ring_head - cursor->current_pos;
-
-        cursor->current_pos = ring_head;
-
-        tmp_callback = Field(callbacks, 5); /* lost_events */
-        if (Is_some(tmp_callback)) {
-          caml_callback(tmp_callback, Val_long(num_lost_events));
-        }
-
-        break;
-      }
-
-      cursor->current_pos += msg_length;
-
-      switch (RING_ITEM_TYPE(header)) {
-      case EV_BEGIN:
-        tmp_callback = Field(callbacks, 0); /* ev_runtime_begin */
-        if (Is_some(tmp_callback)) {
-          ts_val = caml_copy_int64(buf[1]);
-          msg_type = Val_long(RING_ITEM_ID(header));
-
-          caml_callback2(Some_val(tmp_callback), ts_val, msg_type);
-        }
-        break;
-      case EV_EXIT:
-        tmp_callback = Field(callbacks, 1); /* ev_runtime_end */
-        if (Is_some(tmp_callback)) {
-          ts_val = caml_copy_int64(buf[1]);
-          msg_type = Val_long(RING_ITEM_ID(header));
-
-          caml_callback2(Some_val(tmp_callback), ts_val, msg_type);
-        }
-        break;
-      case EV_COUNTER:
-        tmp_callback = Field(callbacks, 2); /* ev_runtime_counter */
-        if (Is_some(tmp_callback)) {
-          ts_val = caml_copy_int64(buf[1]);
-          counter_val = Val_long(buf[2]);
-          msg_type = Val_long(RING_ITEM_ID(header));
-
-          caml_callback3(Some_val(tmp_callback), ts_val, msg_type, counter_val);
-        }
-        break;
-      case EV_ALLOC:
-        tmp_callback = Field(callbacks, 3); /* ev_alloc */
-        if (Is_some(tmp_callback)) {
-          int i;
-
-          ts_val = caml_copy_int64(buf[1]);
-          counter_val = caml_copy_int64(buf[2]);
-          msg_type = Val_long(RING_ITEM_ID(header));
-
-          misc_val = caml_alloc(NUM_ALLOC_BUCKETS, 0);
-
-          for (i = 0; i < NUM_ALLOC_BUCKETS; i++) {
-            Store_field(misc_val, i, Val_long(buf[2 + i]));
-          }
-
-          caml_callback2(Some_val(tmp_callback), ts_val, misc_val);
-        }
-        break;
-      case EV_LIFECYCLE:
-        tmp_callback = Field(callbacks, 4); /* ev_lifecycle */
-        if (Is_some(tmp_callback)) {
-          ts_val = caml_copy_int64(buf[1]);
-          msg_type = Val_long(RING_ITEM_ID(header));
-          if( buf[2] != 0 ) {
-            misc_val = caml_alloc(1, 0);
-            Store_field(misc_val, 0, Val_long(buf[2]));
-          } else {
-            misc_val = Val_none;
-          }
-
-          caml_callback3(Some_val(tmp_callback), ts_val, msg_type, misc_val);
-        }
-        break;
-      }
-
-      if (RING_ITEM_TYPE(header) != EV_INTERNAL) {
-        events_consumed++;
-      }
-    }
-
-  } while (ring_tail <
-           atomic_load_explicit(&ring_header->ring_tail, memory_order_acquire)
-          && (max_events <= 0 || events_consumed < max_events));
+  caml_remove_generational_global_root(&callbacks_root);
 
   CAMLreturn(Int_val(events_consumed));
 };

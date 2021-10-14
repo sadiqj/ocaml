@@ -10,7 +10,7 @@ let compacts = ref 0
 
 let got_start = ref false
 
-let lifecycle ts lifecycle_event data =
+let lifecycle domain_id ts lifecycle_event data =
     match lifecycle_event with
     | EV_START ->
         begin
@@ -21,7 +21,7 @@ let lifecycle ts lifecycle_event data =
         end
     | _ -> ()
 
-let runtime_begin ts phase =
+let runtime_begin domain_id ts phase =
     match phase with
     | EV_MAJOR ->
         begin
@@ -40,7 +40,7 @@ let runtime_begin ts phase =
         end
     | _ -> ()
 
-let runtime_end ts phase =
+let runtime_end domain_id ts phase =
     match phase with
     | EV_MAJOR ->
         begin
@@ -69,14 +69,14 @@ let () =
         ignore(Sys.opaque_identity(ref 42));
         Gc.compact ()
     done;
-    let callbacks = { 
+    let callbacks = {
         ev_runtime_begin = Some(runtime_begin);
         ev_runtime_end = Some(runtime_end);
         ev_runtime_counter = None;
         ev_alloc = None;
         ev_lifecycle = Some(lifecycle);
         ev_lost_events = None
-    } in 
+    } in
     ignore(read_poll cursor callbacks (Some 1000));
     assert(!got_start);
     Printf.printf "minors: %d, majors: %d, compact: %d\n" !minors !majors !compacts

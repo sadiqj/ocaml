@@ -728,8 +728,8 @@ static void ml_runtime_counter(int domain_id, void *callback_data,
   if (Is_some(tmp_callback)) {
     params[0] = Val_long(domain_id);
     params[1] = caml_copy_int64(timestamp);
-    params[2] = Val_long(val);
-    params[3] = Val_long(counter);
+    params[2] = Val_long(counter);
+    params[3] = Val_long(val);
 
     caml_callbackN(Some_val(tmp_callback), 4, params);
   }

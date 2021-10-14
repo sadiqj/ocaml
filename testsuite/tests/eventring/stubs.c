@@ -64,7 +64,7 @@ value get_event_counts(void) {
     CAMLlocal1(counts_tuple);
     counts_tuple = caml_alloc_small(3, 0);
 
-    struct caml_eventring_cursor* cursor = caml_eventring_create_cursor(NULL, Caml_state->eventlog_startup_pid);
+    struct caml_eventring_cursor* cursor = caml_eventring_create_cursor(NULL, -1);
 
     if( !cursor ) {
         caml_failwith("invalid or non-existent cursor");

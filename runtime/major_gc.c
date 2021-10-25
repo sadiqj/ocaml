@@ -732,6 +732,8 @@ static void sweep_slice (intnat work)
       if (sweep_chunk == NULL){
         /* Sweeping is done. */
         ++ Caml_state->stat_major_collections;
+        caml_ev_counter(EV_STAT_MAJOR_COLLECTIONS, 1);
+        caml_ev_counter(EV_STAT_HEAP_WORDS, Caml_state->stat_heap_wsz);
         work = 0;
         caml_gc_phase = Phase_idle;
         caml_request_minor_gc ();
@@ -967,6 +969,7 @@ void caml_major_collection_slice (intnat howmuch)
     for (i = 0; i < caml_major_window; i++) caml_major_ring[i] += p;
   }
 
+  caml_ev_counter(EV_STAT_MAJOR_WORDS, caml_allocated_words);
   Caml_state->stat_major_words += caml_allocated_words;
   caml_allocated_words = 0;
   caml_dependent_allocated = 0;
@@ -990,6 +993,7 @@ void caml_finish_major_cycle (void)
   CAMLassert (redarken_first_chunk == NULL);
   while (caml_gc_phase == Phase_sweep) sweep_slice (LONG_MAX);
   CAMLassert (caml_gc_phase == Phase_idle);
+  caml_ev_counter(EV_STAT_MAJOR_WORDS, caml_allocated_words);
   Caml_state->stat_major_words += caml_allocated_words;
   caml_allocated_words = 0;
 }

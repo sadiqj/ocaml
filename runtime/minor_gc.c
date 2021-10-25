@@ -417,7 +417,9 @@ void caml_empty_minor_heap (void)
     }
     CAML_EV_END(EV_MINOR_UPDATE_WEAK);
     CAML_EV_BEGIN(EV_MINOR_FINALIZED);
-    CAML_EV_COUNTER (EV_C_MINOR_ALLOCATED, 
+    CAML_EV_COUNTER (EV_C_MINOR_ALLOCATED,
+      Caml_state->young_alloc_end - Caml_state->young_ptr);
+    CAML_EV_COUNTER (EV_STAT_MINOR_WORDS,
       Caml_state->young_alloc_end - Caml_state->young_ptr);
     Caml_state->stat_minor_words +=
       Caml_state->young_alloc_end - Caml_state->young_ptr;
@@ -436,14 +438,18 @@ void caml_empty_minor_heap (void)
     Caml_state->stat_promoted_words += caml_allocated_words - prev_alloc_words;
     CAML_EV_COUNTER (EV_C_MINOR_PROMOTED,
                      caml_allocated_words - prev_alloc_words);
+    CAML_EV_COUNTER (EV_STAT_MINOR_PROMOTED_WORDS,
+                     caml_allocated_words - prev_alloc_words);
+    CAML_EV_COUNTER (EV_STAT_MINOR_SIZE, Caml_state->minor_heap_wsz);
     ++ Caml_state->stat_minor_collections;
+    caml_ev_counter(EV_STAT_MINOR_COLLECTIONS, 1);
     caml_memprof_renew_minor_sample();
     if (caml_minor_gc_end_hook != NULL) (*caml_minor_gc_end_hook) ();
   }else{
     /* The minor heap is empty nothing to do. */
     caml_final_empty_young ();
   }
-  
+
   CAML_EV_END(EV_MINOR);
 #ifdef DEBUG
   {

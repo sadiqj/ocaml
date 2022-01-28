@@ -116,7 +116,7 @@ void caml_eventring_init() {
 
   ring_size_words = 1 << caml_params->eventring_size;
 
-  if (caml_secure_getenv(T("OCAML_EVENTRING_START"))) {
+  if ( 1 /*caml_secure_getenv(T("OCAML_EVENTRING_START"))*/) {
     caml_eventring_start();
   }
 }

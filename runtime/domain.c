@@ -1195,7 +1195,6 @@ static void handle_gc_interrupt() {
   atomic_uintnat* young_limit = domain_self->interruptor.interrupt_word;
   CAMLalloc_point_here;
 
-  CAML_EV_BEGIN(EV_INTERRUPT_GC);
   if (caml_check_pending_actions()) {
     /* interrupt */
     CAML_EV_BEGIN(EV_INTERRUPT_REMOTE);
@@ -1209,8 +1208,6 @@ static void handle_gc_interrupt() {
   }
 
   caml_poll_gc_work();
-
-  CAML_EV_END(EV_INTERRUPT_GC);
 }
 
 CAMLexport void caml_process_pending_actions(void)

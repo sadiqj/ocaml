@@ -772,10 +772,10 @@ void caml_darken(void* state, value v, value* ignored) {
   header_t hd;
   if (!Is_markable (v)) return; /* foreign stack, at least */
 
-  hd = Hd_val(v);
+  hd = atomic_load_explicit(Hp_atomic_val(v), memory_order_relaxed);
   if (Tag_hd(hd) == Infix_tag) {
     v -= Infix_offset_hd(hd);
-    hd = Hd_val(v);
+    hd = atomic_load_explicit(Hp_atomic_val(v), memory_order_relaxed);
   }
   if (Has_status_hd(hd, caml_global_heap_state.UNMARKED)) {
     if (Caml_state->marking_done) {

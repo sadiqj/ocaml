@@ -467,7 +467,8 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
     struct heap_stats* s = &local->stats;
 
     while (p + wh <= end) {
-      header_t hd = (header_t)*p;
+      header_t hd = atomic_load_explicit((atomic_uintnat *)(p),
+                                         memory_order_relaxed);
       if (hd == 0) {
         /* already on freelist */
         all_used = 0;

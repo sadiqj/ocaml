@@ -218,7 +218,10 @@ static int try_update_object_header(value v, value *p, value result,
     }
   }
 
-  *p = result + infix_offset;
+  atomic_store_explicit((atomic_uintnat *)(p),
+                        result + infix_offset,
+                        memory_order_relaxed);
+
   return success;
 }
 

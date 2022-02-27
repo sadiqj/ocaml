@@ -262,10 +262,17 @@ static pool* pool_global_adopt(struct caml_heap_state* local, sizeclass sz)
   pool* r = NULL;
   int adopted_pool = 0;
 
-  /* probably no available pools out there to be had */
-  if( !pool_freelist.global_avail_pools[sz] &&
-      !pool_freelist.global_full_pools[sz] )
-    return NULL;
+  /* probably no available pools out there to be had so do the check before
+     we take the lock. Note that writes to these lists only happen with the
+     freelist's mutex held. */
+  if( !atomic_load_explicit(
+        (atomic_uintnat*)(&pool_freelist.global_avail_pools[sz]),
+        memory_order_relaxed)
+      &&
+      !atomic_load_explicit(
+        (atomic_uintnat*)(&pool_freelist.global_full_pools[sz]),
+        memory_order_relaxed)
+    ) return NULL;
 
   /* Haven't managed to find a pool locally, try the global ones */
   caml_plat_lock(&pool_freelist.lock);
@@ -273,7 +280,13 @@ static pool* pool_global_adopt(struct caml_heap_state* local, sizeclass sz)
     r = pool_freelist.global_avail_pools[sz];
 
     if( r ) {
-      pool_freelist.global_avail_pools[sz] = r->next;
+      /* this is atomic because there is a race with the check we do ahead of
+         taking the lock */
+      atomic_store_explicit(
+        (atomic_uintnat*)(&pool_freelist.global_avail_pools[sz]),
+        (uintnat)r->next,
+        memory_order_relaxed);
+
       r->next = 0;
       local->avail_pools[sz] = r;
       adopt_pool_stats_with_lock(local, r, sz);
@@ -297,7 +310,13 @@ static pool* pool_global_adopt(struct caml_heap_state* local, sizeclass sz)
     r = pool_freelist.global_full_pools[sz];
 
     if( r ) {
-      pool_freelist.global_full_pools[sz] = r->next;
+      /* as with global_avail_pools above, this is atomic because there is a
+      race with the check we do ahead of taking the lock */
+      atomic_store_explicit(
+        (atomic_uintnat*)(&pool_freelist.global_full_pools[sz]),
+        (uintnat)r->next,
+        memory_order_relaxed);
+
       r->next = local->full_pools[sz];
       local->full_pools[sz] = r;
       adopt_pool_stats_with_lock(local, r, sz);

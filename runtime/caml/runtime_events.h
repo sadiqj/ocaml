@@ -233,13 +233,6 @@ CAMLextern runtime_events_error caml_runtime_events_read_poll(
     void *callback_data,
     uintnat max_events, uintnat *events_consumed);
 
-/* OCaml API for reading from the runtime_events. Documented in runtime_events.ml */
-extern value caml_runtime_events_create_cursor_ml(value path_pid);
-extern value caml_runtime_events_free_cursor_ml(value wrapped_cursor);
-extern value caml_runtime_events_read_poll_ml(value wrapped_cursor,
-                                              value callbacks,
-                                              value max_events_option);
-
 #ifdef CAML_INTERNALS
 
 struct runtime_events_buffer_header {

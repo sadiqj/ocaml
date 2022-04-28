@@ -159,26 +159,29 @@ typedef enum {
   E_MAP_FAILURE = -7,
 } runtime_events_error;
 
-/* Starts runtime_events. Needs to be called before [caml_runtime_events_create_cursor] */
+/* Starts runtime_events. Needs to be called before
+   [caml_runtime_events_create_cursor] */
 extern value caml_runtime_events_start();
 
-/* Pauses runtime_events. No new events (other than the pause itself) will be written
-   to the runtime_eventss by this domain immediately and all other domains soon. */
+/* Pauses runtime_events. No new events (other than the pause itself) will be
+   written to the ring buffer by this domain immediately and all other domains
+   soon. */
 extern value caml_runtime_events_pause();
 
-/* Removes runtime_events. New events (as well as a resume event) will be written to
-   this domain immediately and all other domains soon. */
+/* Removes runtime_events. New events (as well as a resume event) will be
+   written to this domain immediately and all other domains soon. */
 extern value caml_runtime_events_resume();
 
-/* Create a cursor to read events from an runtime_events. Cursors can be created for
-   runtime_eventss in and out of process. An runtime_events may have multiple cursors
-   reading from it at any point in time and a program may have multiple cursors
-   open concurrently (for example if multiple consumers want different sets
-   of events). To create one for the current process, pass [runtime_events_path] as
-   NULL and a [pid] < 0. Otherwise [runtime_events_path] is a path to a directory
-   containing the .runtime_events files. [pid] is the process id (or equivalent) of
-   the startup OCaml process. The resulting cursor can be used with
-   `caml_runtime_events_read_poll` to read events from the runtime_eventss. */
+/* Create a cursor to read events from an runtime_events. Cursors can be created
+   for runtime_eventss in and out of process. An runtime_events may have
+   multiple cursors reading from it at any point in time and a program may have
+   multiple cursors open concurrently (for example if multiple consumers want
+   different sets of events). To create one for the current process, pass
+   [runtime_events_path] as NULL and a [pid] < 0. Otherwise
+   [runtime_events_path] is a path to a directory containing the .runtime_events
+   files. [pid] is the process id (or equivalent) of the startup OCaml process.
+   The resulting cursor can be used with `caml_runtime_events_read_poll` to read
+   events from the runtime_events ring-buffers. */
 extern runtime_events_error
 caml_runtime_events_create_cursor(const char_os* runtime_events_path, int pid,
                              struct caml_runtime_events_cursor **cursor_res);
@@ -222,8 +225,8 @@ extern void caml_runtime_events_set_lost_events(
 extern void
 caml_runtime_events_free_cursor(struct caml_runtime_events_cursor *cursor);
 
-/* polls the runtime_events pointed to by [cursor] and calls the appropriate callback
-    for each new event up to at most [max_events] times.
+/* polls the runtime_events pointed to by [cursor] and calls the appropriate
+   callback for each new event up to at most [max_events] times.
 
     Returns the number of events consumed in [events_consumed], if set.
 
@@ -264,25 +267,27 @@ struct runtime_events_metadata_header {
 event id (13 bits)
 */
 
-#define RUNTIME_EVENTS_ITEM_LENGTH(header) (((header) >> 54) & ((1UL << 10) - 1))
+#define RUNTIME_EVENTS_ITEM_LENGTH(header) \
+        (((header) >> 54) & ((1UL << 10) - 1))
 #define RUNTIME_EVENTS_ITEM_IS_RUNTIME(header) !((header) | (1UL << 53))
 #define RUNTIME_EVENTS_ITEM_IS_USER(header) ((header) | (1UL << 53))
 #define RUNTIME_EVENTS_ITEM_TYPE(header) (((header) >> 49) & ((1UL << 4) - 1))
 #define RUNTIME_EVENTS_ITEM_ID(header) (((header) >> 36) & ((1UL << 13) - 1))
 
-/* Set up runtime_events (and check if we need to start it immediately). Called
-   from startup* */
+/* Set up runtime_events (and check if we need to start it immediately).
+   Called from startup* */
 void caml_runtime_events_init();
 
-/* Destroy all allocated runtime_events structures and clear up the ring. Called
-   from [caml_sys_exit] */
+/* Destroy all allocated runtime_events structures and clear up the ring.
+   Called from [caml_sys_exit] */
 void caml_runtime_events_destroy();
 
-/* Handle safely re-initialising the runtime_events structures in a forked child */
+/* Handle safely re-initialising the runtime_events structures
+   in a forked child */
 void caml_runtime_events_post_fork();
 
-/* Returns the location of the runtime_events for the current process if started or
-   NULL otherwise */
+/* Returns the location of the runtime_events for the current process if started
+   or NULL otherwise */
 char_os* caml_runtime_events_current_location();
 
 /* Functions for putting runtime data on to the runtime_events */

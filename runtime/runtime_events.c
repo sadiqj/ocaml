@@ -47,8 +47,8 @@
 #define RUNTIME_EVENTS_VERSION 1
 
 /*
-This file contains the implementation for runtime_events's producer. The consumer
-can be found in runtime_events_consumer.
+This file contains the implementation for runtime_events's producer. The
+consumer can be found in runtime_events_consumer.
 
 Eventring is a transport for runtime events. When enabled the caml_ev_* probes
 emit events that get written to per-domain memory-mapped ring buffers. Consumers
@@ -63,10 +63,10 @@ producer and discard events when that happens.
 
 The producer code is contained here . By default a <pid>.events file is
 created in the current directory (overridable by setting
-OCAML_RUNTIME_EVENTS_DIR). This file contains a ring buffer for each possible domain
-(Max_domains). It is laid out in a structure that enables sparsity. On-disk
-(or in-memory) footprint is proportional to the max number of concurrent domains
-the process has ever run.
+OCAML_RUNTIME_EVENTS_DIR). This file contains a ring buffer for each possible
+domain (Max_domains). It is laid out in a structure that enables sparsity.
+On-disk (or in-memory) footprint is proportional to the max number of concurrent
+domains the process has ever run.
 
 On disk structure:
 
@@ -95,7 +95,8 @@ static HANDLE ring_file_handle;
 static HANDLE ring_handle;
 #endif
 
-/* This comes from OCAMLRUNPARAMs and is initialised in caml_runtime_events_init */
+/* This comes from OCAMLRUNPARAMs and is initialised in
+   caml_runtime_events_init */
 static int ring_size_words;
 
 static atomic_uintnat runtime_events_enabled = 0;
@@ -113,8 +114,8 @@ void caml_runtime_events_init() {
   ring_size_words = 1 << caml_params->runtime_events_log_wsize;
 
   if (caml_secure_getenv(T("OCAML_RUNTIME_EVENTS_START"))) {
-    /* since [caml_runtime_events_init] can only be called from the startup code and
-    we can be sure there is only a single domain running, it is safe to call
+    /* since [caml_runtime_events_init] can only be called from the startup code
+    and we can be sure there is only a single domain running, it is safe to call
     [runtime_events_create_raw] outside of a stop-the-world section */
     runtime_events_create_raw();
   }
@@ -197,14 +198,15 @@ void caml_runtime_events_destroy() {
     /* clean up runtime_events when we exit. */
     int remove_file = 1;
     do {
-      caml_try_run_on_all_domains(&stw_teardown_runtime_events, &remove_file, NULL);
+      caml_try_run_on_all_domains(&stw_teardown_runtime_events,
+                                  &remove_file, NULL);
     }
     while( atomic_load_acq(&runtime_events_enabled) );
   }
 }
 
-/* Create the initial runtime_eventss. This must be called from within a
-  stop-the-world section if we cannot be sure there is only a single
+/* Create the initial runtime_events ring buffers. This must be called from
+  within a stop-the-world section if we cannot be sure there is only a single
   domain running. */
 static void runtime_events_create_raw() {
   /* Don't initialise runtime_events twice */

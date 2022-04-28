@@ -49,9 +49,9 @@
 
 struct caml_runtime_events_cursor {
   int cursor_open;                  /* has this cursor been opened? */
-  struct runtime_events_metadata_header *metadata; /* pointer to the ring metadata */
+  struct runtime_events_metadata_header *metadata; /* ptr to ring metadata */
   uint64_t *current_positions;      /* positions in the rings for each domain */
-  size_t ring_file_size_bytes; /* the size of the runtime_events file in bytes */
+  size_t ring_file_size_bytes; /* size of the runtime_events file in bytes */
   int next_read_domain;        /* the next domain to read from */
 #ifdef _WIN32
   HANDLE ring_file_handle;
@@ -222,7 +222,8 @@ caml_runtime_events_create_cursor(const char_os* runtime_events_path, int pid,
   return E_SUCCESS;
 }
 
-void caml_runtime_events_set_runtime_begin(struct caml_runtime_events_cursor *cursor,
+void caml_runtime_events_set_runtime_begin(
+                                      struct caml_runtime_events_cursor *cursor,
                                       int (*f)(int domain_id,
                                                void *callback_data,
                                                uint64_t timestamp,
@@ -230,7 +231,8 @@ void caml_runtime_events_set_runtime_begin(struct caml_runtime_events_cursor *cu
   cursor->runtime_begin = f;
 }
 
-void caml_runtime_events_set_runtime_end(struct caml_runtime_events_cursor *cursor,
+void caml_runtime_events_set_runtime_end(
+                                    struct caml_runtime_events_cursor *cursor,
                                     int (*f)(int domain_id, void *callback_data,
                                              uint64_t timestamp,
                                              ev_runtime_phase phase)) {
@@ -250,7 +252,8 @@ void caml_runtime_events_set_alloc(struct caml_runtime_events_cursor *cursor,
   cursor->alloc = f;
 }
 
-void caml_runtime_events_set_lifecycle(struct caml_runtime_events_cursor *cursor,
+void caml_runtime_events_set_lifecycle(
+                                  struct caml_runtime_events_cursor *cursor,
                                   int (*f)(int domain_id, void *callback_data,
                                             int64_t timestamp,
                                             ev_lifecycle lifecycle,
@@ -258,7 +261,8 @@ void caml_runtime_events_set_lifecycle(struct caml_runtime_events_cursor *cursor
   cursor->lifecycle = f;
 }
 
-void caml_runtime_events_set_lost_events(struct caml_runtime_events_cursor *cursor,
+void caml_runtime_events_set_lost_events(
+                                    struct caml_runtime_events_cursor *cursor,
                                     int (*f)(int domain_id,
                                               void *callback_data,
                                               int lost_words)) {
@@ -266,7 +270,7 @@ void caml_runtime_events_set_lost_events(struct caml_runtime_events_cursor *curs
 }
 
 /* frees a cursor obtained from caml_runtime_events_reader_create */
-void caml_runtime_events_free_cursor(struct caml_runtime_events_cursor *cursor) {
+void caml_runtime_events_free_cursor(struct caml_runtime_events_cursor *cursor){
   if (cursor->cursor_open) {
     cursor->cursor_open = 0;
 #ifdef _WIN32
@@ -392,7 +396,8 @@ caml_runtime_events_read_poll(struct caml_runtime_events_cursor *cursor,
       case EV_COUNTER:
         if (cursor->runtime_counter) {
           if( !cursor->runtime_counter(domain_num, callback_data, buf[1],
-                                        RUNTIME_EVENTS_ITEM_ID(header), buf[2]) ) {
+                                       RUNTIME_EVENTS_ITEM_ID(header), buf[2]
+                                      ) ) {
                                           early_exit = 1;
                                           continue;
                                         };
@@ -437,7 +442,8 @@ caml_runtime_events_read_poll(struct caml_runtime_events_cursor *cursor,
   return E_SUCCESS;
 }
 
-#define Cursor_val(v) (*((struct caml_runtime_events_cursor **)Data_custom_val(v)))
+#define Cursor_val(v) \
+  (*((struct caml_runtime_events_cursor **)Data_custom_val(v)))
 
 static void finalise_cursor(value v) {
   struct caml_runtime_events_cursor *cursor = Cursor_val(v);
@@ -597,7 +603,7 @@ CAMLprim value caml_ml_runtime_events_create_cursor(value path_pid_option) {
   runtime_events_error res;
 
   wrapper = caml_alloc_custom(&cursor_operations,
-                              sizeof(struct caml_runtime_events_cursor *), 0, 1);
+                            sizeof(struct caml_runtime_events_cursor *), 0, 1);
 
   Cursor_val(wrapper) = NULL;
 

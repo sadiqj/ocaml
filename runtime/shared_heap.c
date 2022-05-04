@@ -260,7 +260,6 @@ static intnat pool_sweep(struct caml_heap_state* local,
 static pool* pool_global_adopt(struct caml_heap_state* local, sizeclass sz)
 {
   pool* r = NULL;
-  int adopted_pool = 0;
 
   /* probably no available pools out there to be had */
   if( !pool_freelist.global_avail_pools[sz] &&
@@ -291,29 +290,8 @@ static pool* pool_global_adopt(struct caml_heap_state* local, sizeclass sz)
     }
   }
 
-  /* There were no global avail pools, so let's adopt one of the full ones and
-     try our luck sweeping it later on */
-  if( !r ) {
-    r = pool_freelist.global_full_pools[sz];
-
-    if( r ) {
-      pool_freelist.global_full_pools[sz] = r->next;
-      r->next = local->full_pools[sz];
-      local->full_pools[sz] = r;
-      adopt_pool_stats_with_lock(local, r, sz);
-
-      adopted_pool = 1;
-      r = 0; // this pool is full
-    }
-  }
-
   caml_plat_unlock(&pool_freelist.lock);
 
-  if( !r && adopted_pool ) {
-    local->owner->major_work_todo -=
-      pool_sweep(local, &local->full_pools[sz], sz, 0);
-    r = local->avail_pools[sz];
-  }
   return r;
 }
 
@@ -322,15 +300,6 @@ static pool* pool_find(struct caml_heap_state* local, sizeclass sz) {
   pool* r;
 
   /* Hopefully we have a pool we can use directly */
-  r = local->avail_pools[sz];
-  if (r) return r;
-
-  /* Otherwise, try to sweep until we find one */
-  while (!local->avail_pools[sz] && local->unswept_avail_pools[sz]) {
-    local->owner->major_work_todo -=
-      pool_sweep(local, &local->unswept_avail_pools[sz], sz, 0);
-  }
-
   r = local->avail_pools[sz];
   if (r) return r;
 

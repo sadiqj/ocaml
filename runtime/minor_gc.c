@@ -464,7 +464,6 @@ void caml_empty_minor_heap_promote(caml_domain_state* domain,
 
   prev_alloc_words = domain->allocated_words;
 
-  caml_gc_log ("Minor collection of domain %d starting", domain->id);
   CAML_EV_BEGIN(EV_MINOR);
   call_timing_hook(&caml_minor_gc_begin_hook);
 
@@ -516,16 +515,8 @@ void caml_empty_minor_heap_promote(caml_domain_state* domain,
 
       /* if we're the last domain this time, cover all the remaining refs */
       if( curr_idx == participating_count-1 ) {
-        caml_gc_log("taking remainder");
         ref_end = foreign_major_ref->ptr;
       }
-
-      caml_gc_log("idx: %d, foreign_domain: %d, ref_size: %"
-        ARCH_INTNAT_PRINTF_FORMAT"d, refs_per_domain: %"
-        ARCH_INTNAT_PRINTF_FORMAT"d, ref_base: %p, ref_ptr: %p, ref_start: %p"
-        ", ref_end: %p",
-        participating_idx, foreign_domain->id, major_ref_size, refs_per_domain,
-        foreign_major_ref->base, foreign_major_ref->ptr, ref_start, ref_end);
 
       for( r = ref_start ; r < foreign_major_ref->ptr && r < ref_end ; r++ )
       {
@@ -586,15 +577,13 @@ void caml_empty_minor_heap_promote(caml_domain_state* domain,
               remembered_roots, st.live_bytes);
 
   CAML_EV_BEGIN(EV_MINOR_FINALIZERS_ADMIN);
-  caml_gc_log("running finalizer data structure book-keeping");
   /* do the finalizer data structure book-keeping */
   caml_final_update_last_minor(domain);
   CAML_EV_END(EV_MINOR_FINALIZERS_ADMIN);
 
 #ifdef DEBUG
   caml_global_barrier();
-  caml_gc_log("ref_base: %p, ref_ptr: %p",
-    self_minor_tables->major_ref.base, self_minor_tables->major_ref.ptr);
+
   for (r = self_minor_tables->major_ref.base;
        r < self_minor_tables->major_ref.ptr; r++) {
     value vnew = **r;
@@ -678,7 +667,6 @@ static void caml_stw_empty_minor_heap_no_major_slice(caml_domain_state* domain,
     atomic_fetch_add(&caml_minor_cycles_started, 1);
   }
 
-  caml_gc_log("running stw empty_minor_heap_promote");
   caml_empty_minor_heap_promote(domain, participating_count, participating);
 
   /* collect gc stats before leaving the barrier */
@@ -702,7 +690,7 @@ static void caml_stw_empty_minor_heap_no_major_slice(caml_domain_state* domain,
   }
 
   CAML_EV_BEGIN(EV_MINOR_CLEAR);
-  caml_gc_log("running stw empty_minor_heap_domain_clear");
+
   caml_empty_minor_heap_domain_clear(domain);
 #ifdef DEBUG
   {
@@ -712,7 +700,6 @@ static void caml_stw_empty_minor_heap_no_major_slice(caml_domain_state* domain,
 #endif
 
   CAML_EV_END(EV_MINOR_CLEAR);
-  caml_gc_log("finished stw empty_minor_heap");
 }
 
 static void caml_stw_empty_minor_heap (caml_domain_state* domain, void* unused,
@@ -754,7 +741,6 @@ int caml_try_stw_empty_minor_heap_on_all_domains (void)
   CAMLassert(!caml_domain_is_in_stw());
   #endif
 
-  caml_gc_log("requesting stw empty_minor_heap");
   return caml_try_run_on_all_domains_with_spin_work(
     &caml_stw_empty_minor_heap, 0, /* stw handler */
     &caml_empty_minor_heap_setup, /* leader setup */

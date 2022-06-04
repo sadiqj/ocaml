@@ -671,6 +671,11 @@ AS_CASE([$host],
   [i686-*-mingw32],
     [internal_cflags="$internal_cflags -mfpmath=sse -msse2"])
 
+# Solaris/Illumos requires a define in order to get POSIX-compliant headers
+AS_CASE([$host],
+  [*-*-solaris*],
+  [common_cppflags="$common_cppflags -D_POSIX_C_SOURCE=200112L"])
+
 # Use 64-bit file offset if possible
 # See also AC_SYS_LARGEFILE
 # Problem: flags are added to CC rather than CPPFLAGS

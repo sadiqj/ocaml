@@ -674,7 +674,7 @@ AS_CASE([$host],
 # Solaris/Illumos requires a define in order to get POSIX-compliant headers
 AS_CASE([$host],
   [*-*-solaris*],
-  [common_cppflags="$common_cppflags -D_POSIX_C_SOURCE=200112L"])
+  [common_cppflags="$common_cppflags -D_POSIX_C_SOURCE=200809L"])
 
 # Use 64-bit file offset if possible
 # See also AC_SYS_LARGEFILE

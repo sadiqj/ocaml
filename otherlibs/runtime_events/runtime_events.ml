@@ -13,24 +13,24 @@
 (**************************************************************************)
 
 type runtime_counter =
-  EV_C_ALLOC_JUMP
 | EV_C_FORCE_MINOR_ALLOC_SMALL
 | EV_C_FORCE_MINOR_MAKE_VECT
 | EV_C_FORCE_MINOR_SET_MINOR_HEAP_SIZE
-| EV_C_FORCE_MINOR_WEAK
 | EV_C_FORCE_MINOR_MEMPROF
-| EV_C_MAJOR_MARK_SLICE_REMAIN
-| EV_C_MAJOR_MARK_SLICE_FIELDS
-| EV_C_MAJOR_MARK_SLICE_POINTERS
-| EV_C_MAJOR_WORK_EXTRA
-| EV_C_MAJOR_WORK_MARK
-| EV_C_MAJOR_WORK_SWEEP
 | EV_C_MINOR_PROMOTED
+| EV_C_MINOR_ALLOCATED
 | EV_C_REQUEST_MAJOR_ALLOC_SHR
 | EV_C_REQUEST_MAJOR_ADJUST_GC_SPEED
 | EV_C_REQUEST_MINOR_REALLOC_REF_TABLE
 | EV_C_REQUEST_MINOR_REALLOC_EPHE_REF_TABLE
 | EV_C_REQUEST_MINOR_REALLOC_CUSTOM_TABLE
+| EV_C_MAJOR_HEAP_POOL_WORDS
+| EV_C_MAJOR_HEAP_POOL_LIVE_WORDS
+| EV_C_MAJOR_HEAP_LARGE_WORDS
+| EV_C_MAJOR_HEAP_POOL_FRAG_WORDS
+| EV_C_MAJOR_HEAP_POOL_LIVE_BLOCKS
+| EV_C_MAJOR_HEAP_LARGE_BLOCKS
+| EV_C_MINOR_HEAP_SIZE_WORDS
 
 type runtime_phase =
 | EV_EXPLICIT_GC_SET
@@ -86,19 +86,12 @@ type lifecycle =
 
 let runtime_counter_name counter =
   match counter with
-    EV_C_ALLOC_JUMP -> "alloc_jump"
   | EV_C_FORCE_MINOR_ALLOC_SMALL -> "force_minor_alloc_small"
   | EV_C_FORCE_MINOR_MAKE_VECT -> "force_minor_make_vect"
   | EV_C_FORCE_MINOR_SET_MINOR_HEAP_SIZE -> "force_minor_set_minor_heap_size"
-  | EV_C_FORCE_MINOR_WEAK -> "force_minor_weak"
   | EV_C_FORCE_MINOR_MEMPROF -> "force_minor_memprof"
-  | EV_C_MAJOR_MARK_SLICE_REMAIN -> "major_mark_slice_remain"
-  | EV_C_MAJOR_MARK_SLICE_FIELDS -> "major_mark_slice_fields"
-  | EV_C_MAJOR_MARK_SLICE_POINTERS -> "major_mark_slice_pointers"
-  | EV_C_MAJOR_WORK_EXTRA -> "major_work_extra"
-  | EV_C_MAJOR_WORK_MARK -> "major_work_mark"
-  | EV_C_MAJOR_WORK_SWEEP -> "major_work_sweep"
   | EV_C_MINOR_PROMOTED -> "minor_promoted"
+  | EV_C_MINOR_ALLOCATED -> "minor_allocated"
   | EV_C_REQUEST_MAJOR_ALLOC_SHR -> "request_major_alloc_shr"
   | EV_C_REQUEST_MAJOR_ADJUST_GC_SPEED -> "request_major_adjust_gc_speed"
   | EV_C_REQUEST_MINOR_REALLOC_REF_TABLE -> "request_minor_realloc_ref_table"
@@ -106,6 +99,20 @@ let runtime_counter_name counter =
       "request_minor_realloc_ephe_ref_table"
   | EV_C_REQUEST_MINOR_REALLOC_CUSTOM_TABLE ->
       "request_minor_realloc_custom_table"
+  | EV_C_MAJOR_HEAP_POOL_WORDS ->
+      "major_heap_pool_words"
+  | EV_C_MAJOR_HEAP_POOL_LIVE_WORDS ->
+      "major_heap_pool_live_words"
+  | EV_C_MAJOR_HEAP_LARGE_WORDS ->
+      "major_heap_large_words"
+  | EV_C_MAJOR_HEAP_POOL_FRAG_WORDS ->
+      "major_heap_pool_frag_words"
+  | EV_C_MAJOR_HEAP_POOL_LIVE_BLOCKS ->
+      "major_heap_pool_live_blocks"
+  | EV_C_MAJOR_HEAP_LARGE_BLOCKS ->
+      "major_heap_large_blocks"
+  | EV_C_MINOR_HEAP_SIZE_WORDS ->
+      "minor_heap_size_words"
 
 let runtime_phase_name phase =
   match phase with

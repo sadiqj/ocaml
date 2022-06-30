@@ -646,6 +646,8 @@ void caml_empty_minor_heap_promote(caml_domain_state* domain,
                   Bsize_wsize(domain->allocated_words - prev_alloc_words));
 
   CAML_EV_COUNTER(EV_C_MINOR_ALLOCATED, minor_allocated_bytes);
+  CAML_EV_COUNTER(EV_C_MINOR_HEAP_SIZE_WORDS,
+                  (uintnat)Caml_state->minor_heap_wsz);
 
   CAML_EV_END(EV_MINOR);
   caml_gc_log ("Minor collection of domain %d completed: %2.0f%% of %u KB live",

@@ -33,6 +33,9 @@ Working version
 - #11102: Speed up register allocation by permanently spilling registers
   (Stephen Dolan, review by Xavier Leroy)
 
+- #11474: Add support for user-defined events in the runtime event tracing
+  system. (Lucas Pluvinage)
+
 ### Standard library:
 
 - #11128: Add In_channel.isatty, Out_channel.isatty.

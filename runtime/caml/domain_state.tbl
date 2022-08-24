@@ -58,6 +58,9 @@ DOMAIN_STATE(struct caml_minor_tables*, minor_tables)
 DOMAIN_STATE(struct mark_stack*, mark_stack)
 /* Mark stack */
 
+DOMAIN_STATE(struct prefetch_buffer*, prefetch_buffer)
+/* Prefetch buffer */
+
 DOMAIN_STATE(uintnat, marking_done)
 /* Is marking done for the current major cycle. */
 

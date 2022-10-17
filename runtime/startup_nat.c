@@ -27,7 +27,6 @@
 #include "caml/domain.h"
 #include "caml/eventlog.h"
 #include "caml/fail.h"
-#include "caml/freelist.h"
 #include "caml/gc.h"
 #include "caml/gc_ctrl.h"
 #include "caml/intext.h"

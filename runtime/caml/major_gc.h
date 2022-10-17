@@ -18,7 +18,6 @@
 
 #ifdef CAML_INTERNALS
 
-#include "freelist.h"
 #include "misc.h"
 
 /* An interval of a single object to be scanned.

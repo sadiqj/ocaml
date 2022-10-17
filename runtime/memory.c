@@ -22,7 +22,6 @@
 #include "caml/address_class.h"
 #include "caml/config.h"
 #include "caml/fail.h"
-#include "caml/freelist.h"
 #include "caml/gc.h"
 #include "caml/gc_ctrl.h"
 #include "caml/major_gc.h"
@@ -31,6 +30,7 @@
 #include "caml/minor_gc.h"
 #include "caml/misc.h"
 #include "caml/mlvalues.h"
+#include "caml/shared_heap.h"
 #include "caml/signals.h"
 #include "caml/memprof.h"
 #include "caml/eventlog.h"
@@ -346,64 +346,6 @@ int caml_add_to_heap (char *m)
   return 0;
 }
 
-/* Allocate more memory from malloc for the heap.
-   Return a blue block of at least the requested size.
-   The blue block is chained to a sequence of blue blocks (through their
-   field 0); the last block of the chain is pointed by field 1 of the
-   first.  There may be a fragment after the last block.
-   The caller must insert the blocks into the free list.
-   [request] is a number of words and must be less than or equal
-   to [Max_wosize].
-   Return NULL when out of memory.
-*/
-static value *expand_heap (mlsize_t request)
-{
-  /* these point to headers, but we do arithmetic on them, hence [value *]. */
-  value *mem, *hp, *prev;
-  asize_t over_request, malloc_request, remain;
-
-  CAMLassert (request <= Max_wosize);
-  over_request = request + request / 100 * caml_percent_free;
-  malloc_request = caml_clip_heap_chunk_wsz (over_request);
-  mem = (value *) caml_alloc_for_heap (Bsize_wsize (malloc_request));
-  if (mem == NULL){
-    caml_gc_message (0x04, "No room for growing heap\n");
-    return NULL;
-  }
-  remain = Wsize_bsize (Chunk_size (mem));
-  prev = hp = mem;
-  /* FIXME find a way to do this with a call to caml_make_free_blocks */
-  while (Wosize_whsize (remain) > Max_wosize){
-    Hd_hp (hp) = Make_header (Max_wosize, 0, Caml_blue);
-#ifdef DEBUG
-    caml_set_fields (Val_hp (hp), 0, Debug_free_major);
-#endif
-    hp += Whsize_wosize (Max_wosize);
-    remain -= Whsize_wosize (Max_wosize);
-    Field (Val_hp (mem), 1) = Field (Val_hp (prev), 0) = Val_hp (hp);
-    prev = hp;
-  }
-  if (remain > 1){
-    Hd_hp (hp) = Make_header (Wosize_whsize (remain), 0, Caml_blue);
-#ifdef DEBUG
-    caml_set_fields (Val_hp (hp), 0, Debug_free_major);
-#endif
-    Field (Val_hp (mem), 1) = Field (Val_hp (prev), 0) = Val_hp (hp);
-    Field (Val_hp (hp), 0) = (value) NULL;
-  }else{
-    Field (Val_hp (prev), 0) = (value) NULL;
-    if (remain == 1) {
-      Hd_hp (hp) = Make_header (0, 0, Caml_white);
-    }
-  }
-  CAMLassert (Wosize_hp (mem) >= request);
-  if (caml_add_to_heap ((char *) mem) != 0){
-    caml_free_for_heap ((char *) mem);
-    return NULL;
-  }
-  return Op_hp (mem);
-}
-
 /* Remove the heap chunk [chunk] from the heap and give the memory back
    to [free].
 */
@@ -469,13 +411,8 @@ Caml_inline value caml_alloc_shr_aux (mlsize_t wosize, tag_t tag, int track,
 
   if (wosize > Max_wosize) return 0;
   CAML_EV_ALLOC(wosize);
-  hp = caml_fl_allocate (wosize);
-  if (hp == NULL){
-    new_block = expand_heap (wosize);
-    if (new_block == NULL) return 0;
-    caml_fl_add_blocks ((value) new_block);
-    hp = caml_fl_allocate (wosize);
-  }
+  new_block = caml_shared_try_alloc(Caml_state->shared_heap, wosize, tag, 0);
+  hp = Hp_val(new_block);
 
   CAMLassert (Is_in_heap (Val_hp (hp)));
 

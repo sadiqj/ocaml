@@ -21,7 +21,6 @@
 #include "caml/custom.h"
 #include "caml/fail.h"
 #include "caml/finalise.h"
-#include "caml/freelist.h"
 #include "caml/gc.h"
 #include "caml/gc_ctrl.h"
 #include "caml/major_gc.h"

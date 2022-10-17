@@ -40,7 +40,6 @@
 #include "caml/exec.h"
 #include "caml/fail.h"
 #include "caml/fix_code.h"
-#include "caml/freelist.h"
 #include "caml/gc_ctrl.h"
 #include "caml/instrtrace.h"
 #include "caml/interp.h"

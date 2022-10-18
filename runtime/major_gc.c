@@ -145,6 +145,7 @@ Caml_inline void prefetch_block(value v)
 typedef struct prefetch_buffer {
   uintnat enqueued;
   uintnat dequeued;
+  uintnat watermark;
   value buffer[PREFETCH_BUFFER_SIZE];
 } prefetch_buffer_t;
 
@@ -156,6 +157,7 @@ static prefetch_buffer_t* prefetch_buffer_create(void)
 
   pb->enqueued = 0;
   pb->dequeued = 0;
+  pb->watermark = PREFETCH_BUFFER_MIN;
   return pb;
 }
 
@@ -191,6 +193,21 @@ Caml_inline value prefetch_buffer_pop(prefetch_buffer_t* pb)
   const value v = pb->buffer[pb->dequeued & PREFETCH_BUFFER_MASK];
   pb->dequeued += 1;
   return v;
+}
+
+Caml_inline bool prefetch_buffer_above_watermark(prefetch_buffer_t* pb)
+{
+  return (pb->enqueued - pb->dequeued) > pb->watermark;
+}
+
+Caml_inline void prefetch_buffer_drain(prefetch_buffer_t* pb)
+{
+  pb->watermark = 0;
+}
+
+Caml_inline void prefetch_buffer_fill(prefetch_buffer_t* pb)
+{
+  pb->watermark = PREFETCH_BUFFER_MIN;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -753,7 +770,7 @@ static intnat mark_stack_push_block(struct mark_stack* stk, value block)
     mark_stack_push_range(stk,
                           Op_val(block) + i,
                           Op_val(block) + block_wsz);
-    // FIXME should reset min_pb = Pb_min
+    prefetch_buffer_fill(prefetch_buf);
   }
 
   /* take credit for the work we skipped due to the optimisation.
@@ -826,19 +843,19 @@ static void mark_slice_darken(struct mark_stack* stk, value child,
 }
 
 static intnat do_some_marking(struct mark_stack* stk, intnat budget) {
-  prefetch_buffer_t* prefetch_buf = Caml_state->prefetch_buffer;
-  uintnat min_pb = PREFETCH_BUFFER_MIN;
+  prefetch_buffer_t* pb = Caml_state->prefetch_buffer;
 
+  prefetch_buffer_fill(pb);
   while (1) {
-    if (prefetch_buffer_size(prefetch_buf) > min_pb) {
-      value block = prefetch_buffer_pop(prefetch_buf);
+    if (prefetch_buffer_above_watermark(pb)) {
+      value block = prefetch_buffer_pop(pb);
       mark_slice_darken(stk, block, &budget);
     }
     else if (budget <= 0 || stk->count == 0) {
-      if (min_pb > 0) {
+      if (pb->watermark > 0) {
         /* Dequeue from pb even when close to empty, because
            we have nothing else to do */
-        min_pb = 0;
+        prefetch_buffer_drain(pb);
         continue;
       } else {
         /* Couldn't find work with min_pb == 0, so there's nothing to do */
@@ -847,7 +864,6 @@ static intnat do_some_marking(struct mark_stack* stk, intnat budget) {
     }
     else {
       mark_entry me = stk->stack[--stk->count];
-      const uintnat stk_old_count = stk->count;
       while (me.start < me.end) {
         if (budget <= 0) {
           mark_stack_push_range(stk, me.start, me.end);
@@ -858,12 +874,9 @@ static intnat do_some_marking(struct mark_stack* stk, intnat budget) {
         me.start++;
       }
       budget--; /* credit for header */
-      // FIXME correct?
-      if (stk->count > stk_old_count)
-        min_pb = PREFETCH_BUFFER_MIN;
     }
   }
-  CAMLassert(prefetch_buffer_empty(prefetch_buf));
+  CAMLassert(prefetch_buffer_empty(pb));
   return budget;
 }
 

@@ -174,7 +174,7 @@ Caml_inline uintnat prefetch_buffer_size(prefetch_buffer_t* pb)
   return pb->enqueued - pb->dequeued;
 }
 
-Caml_inline void prefetch_buffer_enqueue(prefetch_buffer_t* pb, value v)
+Caml_inline void prefetch_buffer_push(prefetch_buffer_t* pb, value v)
 {
   CAMLassert(Is_block(v) && !Is_young(v));
   CAMLassert(v != Debug_free_major);
@@ -184,7 +184,7 @@ Caml_inline void prefetch_buffer_enqueue(prefetch_buffer_t* pb, value v)
   pb->enqueued += 1;
 }
 
-Caml_inline value prefetch_buffer_dequeue(prefetch_buffer_t* pb)
+Caml_inline value prefetch_buffer_pop(prefetch_buffer_t* pb)
 {
   CAMLassert(pb->enqueued > pb->dequeued);
 
@@ -744,7 +744,7 @@ static intnat mark_stack_push_block(struct mark_stack* stk, value block)
 
     if (Is_markable(v)) {
       prefetch_block(v);
-      prefetch_buffer_enqueue(prefetch_buf, v);
+      prefetch_buffer_push(prefetch_buf, v);
     }
   }
 
@@ -831,7 +831,7 @@ static intnat do_some_marking(struct mark_stack* stk, intnat budget) {
 
   while (1) {
     if (prefetch_buffer_size(prefetch_buf) > min_pb) {
-      value block = prefetch_buffer_dequeue(prefetch_buf);
+      value block = prefetch_buffer_pop(prefetch_buf);
       mark_slice_darken(stk, block, &budget);
     }
     else if (budget <= 0 || stk->count == 0) {

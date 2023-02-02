@@ -54,7 +54,6 @@ CAML_STATIC_ASSERT(sizeof(large_alloc) % sizeof(value) == 0);
 
 static struct {
   caml_plat_mutex lock;
-  pool* free;
 
   /* these only contain swept memory of terminated domains*/
   struct heap_stats stats;
@@ -63,7 +62,6 @@ static struct {
   large_alloc* global_large;
 } pool_freelist = {
   CAML_PLAT_MUTEX_INITIALIZER,
-  NULL,
   { 0, },
   { 0, },
   { 0, },
@@ -160,31 +158,17 @@ void caml_teardown_shared_heap(struct caml_heap_state* heap) {
 
 /* Allocating and deallocating pools from the global freelist. */
 
-#define POOLS_PER_ALLOCATION 16
 static pool* pool_acquire(struct caml_heap_state* local) {
-  pool* r;
+  pool* r = NULL;
+  void* mem = caml_mem_map(Bsize_wsize(POOL_WSIZE),
+                            Bsize_wsize(POOL_WSIZE), 0 /* allocate */);
 
-  caml_plat_lock(&pool_freelist.lock);
-  if (!pool_freelist.free) {
-    void* mem = caml_mem_map(Bsize_wsize(POOL_WSIZE) * POOLS_PER_ALLOCATION,
-                              Bsize_wsize(POOL_WSIZE), 0 /* allocate */);
-    int i;
-    if (mem) {
-      CAMLassert(pool_freelist.free == NULL);
-      for (i=0; i<POOLS_PER_ALLOCATION; i++) {
-        r = (pool*)(((uintnat)mem) + ((uintnat)i) * Bsize_wsize(POOL_WSIZE));
-        r->next = pool_freelist.free;
-        r->owner = NULL;
-        pool_freelist.free = r;
-      }
-    }
+  if (mem) {
+    r = mem;
   }
-  r = pool_freelist.free;
-  if (r)
-    pool_freelist.free = r->next;
-  caml_plat_unlock(&pool_freelist.lock);
 
   if (r) CAMLassert (r->owner == NULL);
+
   return r;
 }
 
@@ -195,11 +179,7 @@ static void pool_release(struct caml_heap_state* local,
   CAMLassert(pool->sz == sz);
   local->stats.pool_words -= POOL_WSIZE;
   local->stats.pool_frag_words -= POOL_HEADER_WSIZE + wastage_sizeclass[sz];
-  /* TODO: give free pools back to the OS. Issue #698 */
-  caml_plat_lock(&pool_freelist.lock);
-  pool->next = pool_freelist.free;
-  pool_freelist.free = pool;
-  caml_plat_unlock(&pool_freelist.lock);
+  caml_mem_unmap(pool, Bsize_wsize(POOL_WSIZE));
 }
 
 static void calc_pool_stats(pool* a, sizeclass sz, struct heap_stats* s) {

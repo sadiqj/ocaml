@@ -1011,6 +1011,9 @@ static void cycle_all_domains_callback(caml_domain_state* domain, void* unused,
       /* Cleanups for various data structures that must be done in a STW by
         only a single domain */
       caml_code_fragment_cleanup();
+
+      /* Finally release any pools in the free list to the OS */
+      caml_release_free_pools();
     }
     // should interrupts be processed here or not?
     // depends on whether marking above may need interrupts

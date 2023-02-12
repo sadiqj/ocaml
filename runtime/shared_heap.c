@@ -166,7 +166,7 @@ void caml_teardown_shared_heap(struct caml_heap_state* heap) {
 
 static pool* pool_acquire(struct caml_heap_state* local) {
   pool* r = caml_mem_map(Bsize_wsize(POOL_WSIZE),
-                            Bsize_wsize(POOL_WSIZE), 0 /* allocate */);
+                            0, 0 /* allocate */);
 
   if (r) CAMLassert (r->owner == NULL);
 

@@ -785,6 +785,84 @@ void caml_verify_heap(caml_domain_state *domain) {
   caml_stat_free(st);
 }
 
+static void compact_heap(caml_domain_state* domain_state, void* data, int participating_count, caml_domain_state** participants) {
+  int cycles;
+
+  /* Do three cycles so we know we have no garbage in the heap */
+  for( cycles = 0; cycles < 3 ; cycles++ ) {
+    finish_major_cycle_callback(domain_state, NULL, participating_count, participants);
+  }
+
+  /* Now we need a barrier and we proceed sequentially with our compaction */
+  barrier_status b = caml_global_barrier_begin();
+  if( caml_global_barrier_is_final(b) ) {
+    /* Iterate over pool sizes and collate all pools from all domains.
+       This could be done in parallel eventually. */
+    // void* pool_highwater[NUM_SIZECLASSES];
+    int sz_class;
+
+    uintnat tmp_pools_size = 128;
+    uintnat tmp_pools_len = 0;
+    pool** tmp_pools = caml_stat_alloc_noexc(sizeof(pool*)*tmp_pools_size);
+    pool** new_tmp_pools;
+
+    for(sz_class = 0; sz_class < NUM_SIZECLASSES; sz_class++) {
+      /* Assemble a list of pools from all domains */
+      int domain;
+      for( domain = 0; domain < participating_count; domain++ ) {
+        caml_domain_state* cur_domain_state = participants[domain];
+
+        /* We only care about full pools */
+        pool* cur_pool = cur_domain_state->shared_heap->avail_pools[sz_class];
+
+        while( cur_pool != NULL ) {
+          if( tmp_pools_len++ > tmp_pools_size ){
+            new_tmp_pools
+              = caml_stat_alloc_noexc(sizeof(pool*)*tmp_pools_size*2);
+            memcpy(new_tmp_pools, tmp_pools, tmp_pools_size);
+            tmp_pools_size *= 2;
+            caml_stat_free(tmp_pools);
+            tmp_pools = new_tmp_pools;
+          }
+
+          tmp_pools[tmp_pools_len] = cur_pool;
+          cur_pool = cur_pool->next;
+        }
+      }
+
+      /* First thing we need to do is calculate the number of live words */
+      int live_words = 0;
+      int j;
+
+      for( j = 0 ; j < tmp_pools_len ; j++ ) {
+        pool* cur_pool = tmp_pools[j];
+
+        value* p = (value*)((char*)cur_pool + POOL_HEADER_SZ);
+        value* end = (value*)cur_pool + POOL_WSIZE;
+        mlsize_t wh = wsize_sizeclass[sz_class];
+
+        while (p + wh <= end) {
+          header_t hd = (header_t)atomic_load_relaxed((atomic_uintnat*)p);
+
+          if( hd != 0 ) {
+            live_words += wsize_sizeclass[sz_class];
+          }
+        }
+      }
+
+      printf("szclass: %d (wsize %d), live words: %d", sz_class, wsize_sizeclass, live_words);
+
+      tmp_pools_len = 0;
+    }
+
+    caml_stat_free(tmp_pools);
+  }
+  caml_global_barrier_end(b);
+}
+
+void caml_shared_compact(void) {
+  caml_try_run_on_all_domains(&compact_heap, NULL, NULL);
+}
 
 struct mem_stats {
   /* unit is words */

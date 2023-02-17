@@ -165,8 +165,7 @@ void caml_teardown_shared_heap(struct caml_heap_state* heap) {
 /* Allocating and deallocating pools from the global freelist. */
 
 static pool* pool_acquire(struct caml_heap_state* local) {
-  pool* r = caml_mem_map(Bsize_wsize(POOL_WSIZE),
-                            0, 0 /* allocate */);
+  pool* r = malloc(Bsize_wsize(POOL_WSIZE));
 
   if (r) CAMLassert (r->owner == NULL);
 
@@ -180,7 +179,7 @@ static void pool_release(struct caml_heap_state* local,
   CAMLassert(pool->sz == sz);
   local->stats.pool_words -= POOL_WSIZE;
   local->stats.pool_frag_words -= POOL_HEADER_WSIZE + wastage_sizeclass[sz];
-  caml_mem_unmap(pool, Bsize_wsize(POOL_WSIZE));
+  free(pool);
 }
 
 static void calc_pool_stats(pool* a, sizeclass sz, struct heap_stats* s) {

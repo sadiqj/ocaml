@@ -506,8 +506,6 @@ void *caml_plat_mem_map(uintnat size, uintnat alignment, int reserve_only)
   mem = mmap(0, alloc_sz, reserve_only ? PROT_NONE : (PROT_READ | PROT_WRITE),
              MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   if (mem == MAP_FAILED) {
-    printf("map failed failed %d\n", errno);
-    fflush(stdout);
     return 0;
   }
 

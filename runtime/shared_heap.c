@@ -33,7 +33,6 @@
 #include <errno.h>
 
 typedef unsigned int sizeclass;
-struct global_heap_state caml_global_heap_state = {0 << 8, 1 << 8, 2 << 8};
 
 typedef struct pool {
   struct pool* next;
@@ -323,7 +322,7 @@ value* caml_shared_try_alloc(struct caml_heap_state* local, mlsize_t wosize,
     p = large_allocate(local, Bsize_wsize(whsize));
     if (!p) return 0;
   }
-  colour = pinned ? NOT_MARKABLE : Caml_black;
+  colour = pinned ? Caml_blue : Caml_black;
   Hd_hp (p) = Make_header(wosize, tag, colour);
 #ifdef DEBUG
   {
@@ -369,7 +368,7 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
       if (hd == 0) {
         /* already on freelist */
         all_used = 0;
-      } else if (Has_status_hd(hd, caml_global_heap_state.GARBAGE)) {
+      } else if (Has_status_hd(hd, Caml_white)) {
         CAMLassert(Whsize_hd(hd) <= wh);
         if (Tag_hd (hd) == Custom_tag) {
           void (*final_fun)(value) = Custom_ops_val(Val_hp(p))->finalize;
@@ -420,7 +419,7 @@ static intnat large_alloc_sweep(struct caml_heap_state* local) {
 
   p = (value*)((char*)a + LARGE_ALLOC_HEADER_SZ);
   hd = (header_t)*p;
-  if (Has_status_hd(hd, caml_global_heap_state.GARBAGE)) {
+  if (Has_status_hd(hd, Caml_white)) {
     if (Tag_hd (hd) == Custom_tag) {
       void (*final_fun)(value) = Custom_ops_val(Val_hp(p))->finalize;
       if (final_fun != NULL) final_fun(Val_hp(p));
@@ -470,7 +469,7 @@ intnat caml_sweep(struct caml_heap_state* local, intnat work) {
 
 /* Atoms */
 static const header_t atoms[256] = {
-#define A(i) Make_header(0, i, NOT_MARKABLE)
+#define A(i) Make_header(0, i, Caml_blue)
 A(0),A(1),A(2),A(3),A(4),A(5),A(6),A(7),A(8),A(9),A(10),
 A(11),A(12),A(13),A(14),A(15),A(16),A(17),A(18),A(19),A(20),
 A(21),A(22),A(23),A(24),A(25),A(26),A(27),A(28),A(29),A(30),

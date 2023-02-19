@@ -1096,7 +1096,7 @@ void caml_major_collection_slice (intnat howmuch)
       caml_gc_message (0x200, "overhead at start of cycle = %.0f%%\n",
                        previous_overhead);
     }
-    caml_compact_heap_maybe (previous_overhead);
+    // caml_compact_heap_maybe (previous_overhead); (no compaction)
     CAML_EV_END(EV_MAJOR_CHECK_AND_COMPACT);
   }
 
@@ -1191,7 +1191,7 @@ void caml_init_major_heap (asize_t heap_size)
     caml_fatal_error ("cannot allocate initial page table");
   }
 
-  caml_init_shared_heap();
+  Caml_state->shared_heap = caml_init_shared_heap();
 
   caml_gc_phase = Phase_idle;
 

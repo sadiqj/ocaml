@@ -109,7 +109,6 @@ void caml_parse_ocamlrunparam(void)
   if (opt != NULL){
     while (*opt != '\0'){
       switch (*opt++){
-      case 'a': scanmult (opt, &caml_init_policy); break;
       case 'b': scanmult (opt, &p); caml_record_backtraces(p); break;
       case 'c': scanmult (opt, &p); caml_cleanup_on_exit = (p != 0); break;
       case 'h': scanmult (opt, &caml_init_heap_wsz); break;

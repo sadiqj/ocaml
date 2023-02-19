@@ -30,6 +30,7 @@
 #include "caml/shared_heap.h"
 #include "caml/sizeclasses.h"
 #include "caml/startup_aux.h"
+#include <errno.h>
 
 typedef unsigned int sizeclass;
 struct global_heap_state caml_global_heap_state = {0 << 8, 1 << 8, 2 << 8};
@@ -144,7 +145,7 @@ static uintnat round_up(uintnat size, uintnat align) {
   return (size + align - 1) & ~(align - 1);
 }
 
-long caml_sys_pagesize = 0;
+long caml_sys_pagesize = 4096; // Hardcoded
 
 uintnat caml_mem_round_up_pages(uintnat size)
 {
@@ -164,6 +165,7 @@ void* caml_mem_map(uintnat size, uintnat alignment, int reserve_only)
   mem = mmap(0, alloc_sz, reserve_only ? PROT_NONE : (PROT_READ | PROT_WRITE),
              MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   if (mem == MAP_FAILED) {
+    abort();
     return 0;
   }
 
@@ -352,6 +354,7 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
                          sizeclass sz, int release_to_global_pool) {
   intnat work = 0;
   pool* a = *plist;
+
   if (!a) return 0;
   *plist = a->next;
 

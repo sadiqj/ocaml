@@ -460,11 +460,6 @@ extern uintnat caml_instr_alloc_jump;
 */
 void caml_gc_dispatch (void)
 {
-  CAML_EVENTLOG_DO({
-    CAML_EV_COUNTER(EV_C_ALLOC_JUMP, caml_instr_alloc_jump);
-    caml_instr_alloc_jump =  0;
-  });
-
   if (Caml_state->young_trigger == Caml_state->young_alloc_start){
     /* The minor heap is full, we must do a minor collection. */
     Caml_state->requested_minor_gc = 1;

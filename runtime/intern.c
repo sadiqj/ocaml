@@ -36,6 +36,7 @@
 #include "caml/misc.h"
 #include "caml/reverse.h"
 #include "caml/signals.h"
+#include "caml/shared_heap.h"
 
 
 static unsigned char * intern_src;
@@ -48,9 +49,6 @@ static unsigned char * intern_input = NULL;
 static header_t * intern_dest;
 /* Writing pointer in destination block */
 
-static char * intern_extra_block = NULL;
-/* If non-NULL, point to new heap chunk allocated with caml_alloc_for_heap. */
-
 static asize_t obj_counter;
 /* Count how many objects seen so far */
 
@@ -59,14 +57,6 @@ static value * intern_obj_table = NULL;
 
 static color_t intern_color;
 /* Color to assign to newly created headers */
-
-static header_t intern_header;
-/* Original header of the destination block.
-   Meaningful only if intern_extra_block is NULL. */
-
-static value intern_block = 0;
-/* Point to the heap block allocated as destination block.
-   Meaningful only if intern_extra_block is NULL. */
 
 static char * intern_resolve_code_pointer(unsigned char digest[16],
                                           asize_t offset);
@@ -143,8 +133,7 @@ static void intern_init(void * src, void * input)
   /* This is asserted at the beginning of demarshaling primitives.
      If it fails, it probably means that an exception was raised
      without calling intern_cleanup() during the previous demarshaling. */
-  CAMLassert (intern_input == NULL && intern_obj_table == NULL \
-     && intern_extra_block == NULL && intern_block == 0);
+  CAMLassert (intern_input == NULL && intern_obj_table == NULL);
   intern_src = src;
   intern_input = input;
 }
@@ -159,15 +148,9 @@ static void intern_cleanup(void)
     caml_stat_free(intern_obj_table);
     intern_obj_table = NULL;
   }
-  if (intern_extra_block != NULL) {
-    /* free newly allocated heap chunk */
-    caml_free_for_heap(intern_extra_block);
-    intern_extra_block = NULL;
-  } else if (intern_block != 0) {
-    /* restore original header for heap block, otherwise GC is confused */
-    Hd_val(intern_block) = intern_header;
-    intern_block = 0;
-  }
+
+  intern_dest = NULL;
+
   /* free the recursion stack */
   intern_free_stack();
 }
@@ -317,6 +300,26 @@ static struct intern_item * intern_resize_stack(struct intern_item * sp)
     }                                                                   \
   } while(0)
 
+static value intern_alloc_obj(mlsize_t wosize, tag_t tag)
+{
+  void* p;
+
+  if (intern_dest) {
+    p = intern_dest;
+    *intern_dest = Make_header (wosize, tag, 0);
+    intern_dest += 1 + wosize;
+  } else {
+    value v = caml_alloc_shr(wosize, tag);
+    p = Hp_val(v);
+    if (p == NULL) {
+      intern_cleanup ();
+      caml_raise_out_of_memory();
+    }
+    Hd_hp(p) = Make_header (wosize, tag, caml_global_heap_state.MARKED);
+  }
+  return Val_hp(p);
+}
+
 static void intern_rec(value *dest)
 {
   unsigned int code;
@@ -370,10 +373,8 @@ static void intern_rec(value *dest)
       if (size == 0) {
         v = Atom(tag);
       } else {
-        v = Val_hp(intern_dest);
+        v = intern_alloc_obj (size, tag);
         if (intern_obj_table != NULL) intern_obj_table[obj_counter++] = v;
-        *intern_dest = Make_header(size, tag, intern_color);
-        intern_dest += 1 + size;
         /* For objects, we need to freshen the oid */
         if (tag == Object_tag) {
           CAMLassert(size >= 2);
@@ -400,10 +401,8 @@ static void intern_rec(value *dest)
       len = (code & 0x1F);
     read_string:
       size = (len + sizeof(value)) / sizeof(value);
-      v = Val_hp(intern_dest);
+      v = intern_alloc_obj (size, String_tag);
       if (intern_obj_table != NULL) intern_obj_table[obj_counter++] = v;
-      *intern_dest = Make_header(size, String_tag, intern_color);
-      intern_dest += 1 + size;
       Field(v, size - 1) = 0;
       ofs_ind = Bsize_wsize(size) - 1;
       Byte(v, ofs_ind) = ofs_ind - len;
@@ -472,11 +471,8 @@ static void intern_rec(value *dest)
 #endif
       case CODE_DOUBLE_LITTLE:
       case CODE_DOUBLE_BIG:
-        v = Val_hp(intern_dest);
+        v = intern_alloc_obj (Double_wosize, Double_tag);
         if (intern_obj_table != NULL) intern_obj_table[obj_counter++] = v;
-        *intern_dest = Make_header(Double_wosize, Double_tag,
-                                   intern_color);
-        intern_dest += 1 + Double_wosize;
         readfloat((double *) v, code);
         break;
       case CODE_DOUBLE_ARRAY8_LITTLE:
@@ -484,11 +480,8 @@ static void intern_rec(value *dest)
         len = read8u();
       read_double_array:
         size = len * Double_wosize;
-        v = Val_hp(intern_dest);
+        v = intern_alloc_obj (size, Double_array_tag);
         if (intern_obj_table != NULL) intern_obj_table[obj_counter++] = v;
-        *intern_dest = Make_header(size, Double_array_tag,
-                                   intern_color);
-        intern_dest += 1 + size;
         readfloats((double *) v, len, code);
         break;
       case CODE_DOUBLE_ARRAY32_LITTLE:
@@ -603,51 +596,19 @@ static void intern_rec(value *dest)
 static void intern_alloc(mlsize_t whsize, mlsize_t num_objects)
 {
   mlsize_t wosize;
+  value v;
 
   if (whsize == 0) {
-    CAMLassert (intern_extra_block == NULL && intern_block == 0
-         && intern_obj_table == NULL);
+    CAMLassert (intern_obj_table == NULL);
     return;
   }
   wosize = Wosize_whsize(whsize);
-  if (wosize > Max_wosize) {
-    /* Round desired size up to next page */
-    asize_t request =
-      ((Bsize_wsize(whsize) + Page_size - 1) >> Page_log) << Page_log;
-    intern_extra_block = caml_alloc_for_heap(request);
-    if (intern_extra_block == NULL) {
-      intern_cleanup();
-      caml_raise_out_of_memory();
-    }
-    intern_color = caml_allocation_color(intern_extra_block);
-    intern_dest = (header_t *) intern_extra_block;
-    CAMLassert (intern_block == 0);
+
+  if (wosize <= Max_young_wosize && wosize != 0) {
+    v = caml_alloc_small (wosize, String_tag);
+    intern_dest = (header_t *) Hp_val(v);
   } else {
-    /* this is a specialised version of caml_alloc from alloc.c */
-    if (wosize <= Max_young_wosize){
-      if (wosize == 0){
-        intern_block = Atom (String_tag);
-      }else{
-#define Setup_for_gc
-#define Restore_after_gc
-        Alloc_small_no_track(intern_block, wosize, String_tag);
-#undef Setup_for_gc
-#undef Restore_after_gc
-      }
-    }else{
-      intern_block = caml_alloc_shr_no_track_noexc (wosize, String_tag);
-      /* do not do the urgent_gc check here because it might darken
-         intern_block into gray and break the intern_color assertion below */
-      if (intern_block == 0) {
-        intern_cleanup();
-        caml_raise_out_of_memory();
-      }
-    }
-    intern_header = Hd_val(intern_block);
-    intern_color = Color_hd(intern_header);
-    CAMLassert (intern_color == Caml_white || intern_color == Caml_black);
-    intern_dest = (header_t *) Hp_val(intern_block);
-    CAMLassert (intern_extra_block == NULL);
+    CAMLassert (intern_dest == NULL);
   }
   obj_counter = 0;
   if (num_objects > 0) {
@@ -657,53 +618,19 @@ static void intern_alloc(mlsize_t whsize, mlsize_t num_objects)
       intern_cleanup();
       caml_raise_out_of_memory();
     }
-  } else
+  } else {
     CAMLassert(intern_obj_table == NULL);
-}
-
-static header_t* intern_add_to_heap(mlsize_t whsize)
-{
-  header_t* res = NULL;
-  /* Add new heap chunk to heap if needed */
-  if (intern_extra_block != NULL) {
-    /* If heap chunk not filled totally, build free block at end */
-    asize_t request = Chunk_size (intern_extra_block);
-    header_t * end_extra_block =
-      (header_t *) intern_extra_block + Wsize_bsize(request);
-    CAMLassert(intern_block == 0);
-    CAMLassert(intern_dest <= end_extra_block);
-    if (intern_dest < end_extra_block){
-      caml_make_free_blocks ((value *) intern_dest,
-                             end_extra_block - intern_dest, 0, Caml_white);
-    }
-    caml_allocated_words +=
-      Wsize_bsize ((char *) intern_dest - intern_extra_block);
-    if(caml_add_to_heap(intern_extra_block) != 0) {
-      intern_cleanup();
-      caml_raise_out_of_memory();
-    }
-    res = (header_t*)intern_extra_block;
-    intern_extra_block = NULL; // To prevent intern_cleanup freeing it
-  } else if(intern_block != 0) { /* [intern_block = 0] when [whsize = 0]  */
-    res = Hp_val(intern_block);
-    intern_block = 0; // To prevent intern_cleanup rewriting its header
   }
-  return res;
+
+  return;
 }
 
 static value intern_end(value res, mlsize_t whsize)
 {
   CAMLparam1(res);
-  header_t *block = intern_add_to_heap(whsize);
-  header_t *blockend = intern_dest;
 
   /* Free everything */
   intern_cleanup();
-
-  /* Memprof tracking has to be done here, because unmarshalling can
-     still fail until now. */
-  if(block != NULL)
-    caml_memprof_track_interned(block, blockend);
 
   // Give gc a chance to run, and run memprof callbacks
   caml_process_pending_actions();

@@ -43,8 +43,6 @@ extern uintnat caml_max_stack_size;    /* defined in stacks.c */
 
 extern uintnat caml_major_heap_increment; /* percent or words; see major_gc.c */
 extern uintnat caml_percent_free;         /*        see major_gc.c */
-extern uintnat caml_percent_max;          /*        see compact.c */
-extern uintnat caml_allocation_policy;    /*        see freelist.c */
 extern uintnat caml_custom_major_ratio;   /* see custom.c */
 extern uintnat caml_custom_minor_ratio;   /* see custom.c */
 extern uintnat caml_custom_minor_max_bsz; /* see custom.c */
@@ -213,7 +211,6 @@ static value heap_stats (int returnstats)
 
 #ifdef DEBUG
   caml_final_invariant_check();
-  caml_fl_check ();
 #endif
 
   CAMLassert (heap_chunks == Caml_state->stat_heap_chunks);
@@ -365,13 +362,13 @@ CAMLprim value caml_gc_get(value v)
   Store_field (res, 1, Val_long (caml_major_heap_increment));           /* i */
   Store_field (res, 2, Val_long (caml_percent_free));                   /* o */
   Store_field (res, 3, Val_long (caml_verb_gc));                        /* v */
-  Store_field (res, 4, Val_long (caml_percent_max));                    /* O */
+  Store_field (res, 4, Val_long (0));                    /* O */
 #ifndef NATIVE_CODE
   Store_field (res, 5, Val_long (caml_max_stack_size));                 /* l */
 #else
   Store_field (res, 5, Val_long (0));
 #endif
-  Store_field (res, 6, Val_long (caml_allocation_policy));              /* a */
+  Store_field (res, 6, Val_long (0));              /* a */
   Store_field (res, 7, Val_long (caml_major_window));                   /* w */
   Store_field (res, 8, Val_long (caml_custom_major_ratio));             /* M */
   Store_field (res, 9, Val_long (caml_custom_minor_ratio));             /* m */
@@ -384,11 +381,6 @@ CAMLprim value caml_gc_get(value v)
 static uintnat norm_pfree (uintnat p)
 {
   return Max (p, 1);
-}
-
-static uintnat norm_pmax (uintnat p)
-{
-  return p;
 }
 
 static intnat norm_minsize (intnat s)
@@ -422,10 +414,9 @@ static uintnat norm_custom_min (uintnat p)
 
 CAMLprim value caml_gc_set(value v)
 {
-  uintnat newpf, newpm;
+  uintnat newpf;
   asize_t newheapincr;
   asize_t newminwsz;
-  uintnat newpolicy;
   uintnat new_custom_maj, new_custom_min, new_custom_sz;
   CAML_EV_BEGIN(EV_EXPLICIT_GC_SET);
 
@@ -440,13 +431,6 @@ CAMLprim value caml_gc_set(value v)
     caml_percent_free = newpf;
     caml_gc_message (0x20, "New space overhead: %"
                      ARCH_INTNAT_PRINTF_FORMAT "u%%\n", caml_percent_free);
-  }
-
-  newpm = norm_pmax (Long_val (Field (v, 4)));
-  if (newpm != caml_percent_max){
-    caml_percent_max = newpm;
-    caml_gc_message (0x20, "New max overhead: %"
-                     ARCH_INTNAT_PRINTF_FORMAT "u%%\n", caml_percent_max);
   }
 
   newheapincr = Long_val (Field (v, 1));
@@ -501,19 +485,7 @@ CAMLprim value caml_gc_set(value v)
   /* Save field 0 before [v] is invalidated. */
   newminwsz = norm_minsize (Long_val (Field (v, 0)));
 
-  /* Switching allocation policies must trigger a compaction, so it
-     invalidates [v]. */
-  newpolicy = Long_val (Field (v, 6));
-  if (newpolicy != caml_allocation_policy){
-    caml_empty_minor_heap ();
-    caml_gc_message (0x1, "Full major GC cycle (changing allocation policy)\n");
-    caml_finish_major_cycle ();
-    caml_finish_major_cycle ();
-    ++ Caml_state->stat_forced_major_collections;
-    caml_compact_heap (newpolicy);
-    caml_gc_message (0x20, "New allocation policy: %"
-                     ARCH_INTNAT_PRINTF_FORMAT "u\n", newpolicy);
-  }
+  /* ignore switching policies */
 
   /* Minor heap size comes last because it can raise [Out_of_memory]. */
   if (newminwsz != Caml_state->minor_heap_wsz){
@@ -545,17 +517,7 @@ CAMLprim value caml_gc_minor(value v)
 
 static void test_and_compact (void)
 {
-  double fp;
-
-  fp = 100.0 * caml_fl_cur_wsz / (Caml_state->stat_heap_wsz - caml_fl_cur_wsz);
-  if (fp > 999999.0) fp = 999999.0;
-  caml_gc_message (0x200, "Estimated overhead (lower bound) = %"
-                          ARCH_INTNAT_PRINTF_FORMAT "u%%\n",
-                   (uintnat) fp);
-  if (fp >= caml_percent_max){
-    caml_gc_message (0x200, "Automatic compaction triggered.\n");
-    caml_compact_heap (-1);
-  }
+  // No compaction
 }
 
 CAMLprim value caml_gc_major(value v)
@@ -637,7 +599,7 @@ CAMLprim value caml_gc_compaction(value v)
   caml_empty_minor_heap ();
   caml_finish_major_cycle ();
   ++ Caml_state->stat_forced_major_collections;
-  caml_compact_heap (-1);
+  // caml_compact_heap (-1); (no compaction)
   // call finalisers
   exn = caml_process_pending_actions_exn();
 
@@ -691,8 +653,7 @@ void caml_init_gc (uintnat minor_size, uintnat major_size,
   caml_set_minor_heap_size (Bsize_wsize (norm_minsize (minor_size)));
   caml_major_heap_increment = major_incr;
   caml_percent_free = norm_pfree (percent_fr);
-  caml_percent_max = norm_pmax (percent_m);
-  caml_set_allocation_policy (policy);
+  // caml_set_allocation_policy (policy);
   caml_init_major_heap (major_bsize);
   caml_major_window = norm_window (window);
   caml_custom_major_ratio = norm_custom_maj (custom_maj);
@@ -706,8 +667,6 @@ void caml_init_gc (uintnat minor_size, uintnat major_size,
                    major_bsize / 1024);
   caml_gc_message (0x20, "Initial space overhead: %"
                    ARCH_INTNAT_PRINTF_FORMAT "u%%\n", caml_percent_free);
-  caml_gc_message (0x20, "Initial max overhead: %"
-                   ARCH_INTNAT_PRINTF_FORMAT "u%%\n", caml_percent_max);
   if (caml_major_heap_increment > 1000){
     caml_gc_message (0x20, "Initial heap increment: %"
                      ARCH_INTNAT_PRINTF_FORMAT "uk words\n",
@@ -717,8 +676,6 @@ void caml_init_gc (uintnat minor_size, uintnat major_size,
                      ARCH_INTNAT_PRINTF_FORMAT "u%%\n",
                      caml_major_heap_increment);
   }
-  caml_gc_message (0x20, "Initial allocation policy: %"
-                   ARCH_INTNAT_PRINTF_FORMAT "u\n", caml_allocation_policy);
   caml_gc_message (0x20, "Initial smoothing window: %d\n",
                    caml_major_window);
 }
@@ -747,9 +704,8 @@ CAMLprim value caml_runtime_parameters (value unit)
 
   CAMLassert (unit == Val_unit);
   return caml_alloc_sprintf
-    ("a=%d,b=%d,H=%"F_Z"u,i=%"F_Z"u,l=%"F_Z"u,o=%"F_Z"u,O=%"F_Z"u,p=%d,"
+    ("b=%d,H=%"F_Z"u,i=%"F_Z"u,l=%"F_Z"u,o=%"F_Z"u,p=%d,"
      "s=%"F_S"u,t=%"F_Z"u,v=%"F_Z"u,w=%d,W=%"F_Z"u",
-     /* a */ (int) caml_allocation_policy,
      /* b */ (int) Caml_state->backtrace_active,
      /* h */ /* missing */ /* FIXME add when changed to min_heap_size */
      /* H */ caml_use_huge_pages,
@@ -760,7 +716,6 @@ CAMLprim value caml_runtime_parameters (value unit)
      /* l */ caml_max_stack_size,
 #endif
      /* o */ caml_percent_free,
-     /* O */ caml_percent_max,
      /* p */ caml_parser_trace,
      /* R */ /* missing */
      /* s */ Caml_state->minor_heap_wsz,

@@ -506,16 +506,6 @@ CAMLexport value caml_atom(tag_t tag) {
   return Val_hp(&atoms[tag]);
 }
 
-void caml_cycle_heap_stw (void) {
-  struct global_heap_state oldg = caml_global_heap_state;
-  struct global_heap_state newg;
-  newg.UNMARKED     = oldg.MARKED;
-  newg.GARBAGE      = oldg.UNMARKED;
-  newg.MARKED       = oldg.GARBAGE; /* should be empty because
-                                        garbage was swept */
-  caml_global_heap_state = newg;
-}
-
 void caml_cycle_heap(struct caml_heap_state* local) {
   int i, received_p = 0, received_l = 0;
 

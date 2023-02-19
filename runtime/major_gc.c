@@ -879,6 +879,11 @@ static void clean_slice (intnat work)
 static void sweep_slice (intnat work)
 {
   work = caml_sweep(Caml_state->shared_heap, work);
+
+  if (work > 0){
+    /* Sweep is done. */
+    caml_gc_phase = Phase_idle;
+  }
 }
 
 /* The main entry point for the major GC. Called about once for each

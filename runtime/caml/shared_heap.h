@@ -38,13 +38,6 @@ void caml_shared_unpin(value v);
 /* always readable by all threads
    written only by a single thread during STW periods */
 typedef uintnat status;
-struct global_heap_state {
-  status MARKED, UNMARKED, GARBAGE;
-};
-extern struct global_heap_state caml_global_heap_state;
-
-/* CR mshinwell: ensure this matches [Emitaux] */
-enum {NOT_MARKABLE = 3 << 8};
 
 Caml_inline int Has_status_hd(header_t hd, status s) {
   return (hd & (3 << 8)) == s;
@@ -52,18 +45,6 @@ Caml_inline int Has_status_hd(header_t hd, status s) {
 
 Caml_inline header_t With_status_hd(header_t hd, status s) {
   return (hd & ~(3 << 8)) | s;
-}
-
-Caml_inline int is_garbage(value v) {
-  return Has_status_hd(Hd_val(v), caml_global_heap_state.GARBAGE);
-}
-
-Caml_inline int is_unmarked(value v) {
-  return Has_status_hd(Hd_val(v), caml_global_heap_state.UNMARKED);
-}
-
-Caml_inline int is_marked(value v) {
-  return Has_status_hd(Hd_val(v), caml_global_heap_state.MARKED);
 }
 
 void caml_redarken_pool(struct pool*, scanning_action, void*);
@@ -82,11 +63,6 @@ void caml_cycle_heap(struct caml_heap_state*);
 
 /* caml_verify_heap must only be called while all domains are paused */
 void caml_verify_heap(caml_domain_state *domain);
-
-#ifdef DEBUG
-/* [is_garbage(v)] returns true if [v] is a garbage value */
-int is_garbage (value);
-#endif
 
 #endif /* CAML_INTERNALS */
 

@@ -375,7 +375,8 @@ static value intern_alloc_obj(struct caml_intern_state* s, caml_domain_state* d,
     *s->intern_dest = Make_header (wosize, tag, 0);
     s->intern_dest += 1 + wosize;
   } else {
-    p = Hp_val(caml_alloc_shr(wosize, tag));
+    p = caml_shared_try_alloc(d->shared_heap, wosize, tag,
+                              0);
     if (p == NULL) {
       intern_cleanup (s);
       caml_raise_out_of_memory();

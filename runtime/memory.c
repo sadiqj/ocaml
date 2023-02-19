@@ -406,13 +406,11 @@ CAMLexport color_t caml_allocation_color (void *hp)
 Caml_inline value caml_alloc_shr_aux (mlsize_t wosize, tag_t tag, int track,
                                       uintnat profinfo)
 {
-  header_t *hp;
-  value *new_block;
+  value* hp;
 
   if (wosize > Max_wosize) return 0;
   CAML_EV_ALLOC(wosize);
-  new_block = caml_shared_try_alloc(Caml_state->shared_heap, wosize, tag, 0);
-  hp = Hp_val(new_block);
+  hp = caml_shared_try_alloc(Caml_state->shared_heap, wosize, tag, 0);
 
   CAMLassert (Is_in_heap (Val_hp (hp)));
 

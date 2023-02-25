@@ -791,15 +791,12 @@ void caml_verify_heap(caml_domain_state *domain) {
 
 static inline void update_field(void* ignored, value v, volatile value* p) {
   if (Is_block(v)) {
-    CAMLassert(!Is_young(v));
     header_t vhd = Hd_val(v);
-    size_t vsize = Wosize_hd(vhd);
+    mlsize_t vsize = Whsize_wosize(Wosize_val(v));
 
     if( vsize <= SIZECLASS_MAX )
     {
-      pool* vpool = caml_pool_of_shared_block(v);
-
-      if( vpool->evacuating ) {
+      if( is_garbage(vhd) ) {
         /* Update v to point to the first field of v */
         *p = Field(v, 0);
       }
@@ -944,6 +941,9 @@ static void compact_heap(caml_domain_state* domain_state, void* data, int partic
 
           /* Set first field of p to as a forwarding pointer */
           Field(Val_hp(p), 0) = Val_hp(new_p);
+
+          /* Update the header so it's garbage */
+          atomic_store_relaxed((atomic_uintnat*)p, With_status_hd(hd, caml_global_heap_state.GARBAGE));
         }
 
         p += wh;

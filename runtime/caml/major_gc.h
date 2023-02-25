@@ -54,7 +54,7 @@ void caml_darken_cont(value);
 void caml_mark_root(value, value*);
 void caml_empty_mark_stack(void);
 void caml_finish_major_cycle(void);
-void caml_finish_major_cycle_from_stw(uintnat, caml_domain_state*, void*, int,
+void caml_finish_major_cycle_from_stw(uintnat, caml_domain_state*, int,
                                         caml_domain_state**);
 /* Ephemerons and finalisers */
 void caml_orphan_allocated_words(void);

@@ -1516,11 +1516,12 @@ static void finish_major_cycle_callback (caml_domain_state* domain, void* arg,
 }
 
 void caml_finish_major_cycle_from_stw (uintnat saved_major_cycles,
-                                        caml_domain_state* domain, void* arg,
+                                        caml_domain_state* domain,
                                          int participating_count,
                                          caml_domain_state** participating)
 {
-  finish_major_cycle_callback(domain, arg, participating_count, participating);
+  finish_major_cycle_callback(domain, (void*)saved_major_cycles,
+    participating_count, participating);
 }
 
 void caml_finish_major_cycle (void)

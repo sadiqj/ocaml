@@ -791,6 +791,7 @@ void caml_verify_heap(caml_domain_state *domain) {
 
 static inline void update_field(void* ignored, value v, volatile value* p) {
   if (Is_block(v)) {
+    CAMLassert(!Is_young(v));
     header_t vhd = Hd_val(v);
     size_t vsize = Wosize_hd(vhd);
 

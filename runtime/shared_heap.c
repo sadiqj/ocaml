@@ -796,7 +796,7 @@ static inline void update_field(void* ignored, value v, volatile value* p) {
 
     if( vsize <= SIZECLASS_MAX )
     {
-      if( is_garbage(vhd) ) {
+      if( Has_status_hd(vhd, caml_global_heap_state.GARBAGE) ) {
         /* Update v to point to the first field of v */
         *p = Field(v, 0);
       }

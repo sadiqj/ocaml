@@ -792,14 +792,14 @@ void caml_verify_heap(caml_domain_state *domain) {
 static inline void update_field(void* ignored, value v, volatile value* p) {
   if (Is_block(v)) {
     header_t vhd = Hd_val(v);
+    size_t vsize = Wosize_hd(vhd);
 
-    if( vhd <= SIZECLASS_MAX )
+    if( vsize <= SIZECLASS_MAX )
     {
       pool* vpool = caml_pool_of_shared_block(v);
 
       if( vpool->evacuating ) {
         /* Update v to point to the first field of v */
-        printf("Updating %p to %ld\n", p, Field(v, 0));
         *p = Field(v, 0);
       }
     }
@@ -855,7 +855,7 @@ static void compact_heap(caml_domain_state* domain_state, void* data, int partic
 
   struct caml_heap_state* heap = Caml_state->shared_heap;
 
-  for(sz_class = 0; sz_class < NUM_SIZECLASSES; sz_class++) {
+  for(sz_class = 1; sz_class < NUM_SIZECLASSES; sz_class++) {
     /* We only care about pools that aren't full */
     pool* cur_pool = heap->unswept_avail_pools[sz_class];
     pool* evac_pool = NULL;
@@ -899,14 +899,14 @@ static void compact_heap(caml_domain_state* domain_state, void* data, int partic
         /* Mark this pool as evacuating */
         cur_pool->evacuating = 1;
 
-        if( evac_pool == NULL ) {
+        if( !evac_pool ) {
           evac_pool = cur_pool;
         }
       }
 
-      cur_pool = cur_pool->next;
-
       cur_blocks += (POOL_WSIZE - POOL_HEADER_SZ) / wsize_sizeclass[sz_class];
+
+      cur_pool = cur_pool->next;
     }
 
     cur_pool = heap->unswept_avail_pools[sz_class];
@@ -942,7 +942,7 @@ static void compact_heap(caml_domain_state* domain_state, void* data, int partic
           memcpy(new_p, p, Whsize_hd(hd) * sizeof(value));
 
           /* Set first field of p to as a forwarding pointer */
-          Field(Val_hp(p), 0) = (value)new_p;
+          Field(Val_hp(p), 0) = Val_hp(new_p);
         }
 
         p += wh;
@@ -950,6 +950,8 @@ static void compact_heap(caml_domain_state* domain_state, void* data, int partic
 
       evac_pool = evac_pool->next;
     }
+
+    CAMLassert(cur_pool->next_obj != NULL);
   }
   caml_global_barrier_end(b);
 
@@ -972,10 +974,7 @@ static void compact_heap(caml_domain_state* domain_state, void* data, int partic
     caml_scan_global_roots(&update_field, NULL);
   }
 
-  /* Shared heap pools. Start at size 1 because blocks with zero fields won't
-     contain pointers to update. */
-
-  /* TODO: Full pools */
+  /* Shared heap pools. */
   for(sz_class = 1; sz_class < NUM_SIZECLASSES; sz_class++) {
     pool* cur_pool = heap->unswept_avail_pools[sz_class];
 
@@ -1032,27 +1031,33 @@ static void compact_heap(caml_domain_state* domain_state, void* data, int partic
 
   b = caml_global_barrier_begin();
 
-  for(sz_class = 0; sz_class < NUM_SIZECLASSES; sz_class++) {
+  for(sz_class = 1; sz_class < NUM_SIZECLASSES; sz_class++) {
     pool* cur_pool = heap->unswept_avail_pools[sz_class];
-    pool* next_pool;
+    pool* last_pool;
 
     while( cur_pool != NULL ) {
       if( cur_pool->evacuating ) {
         /* Reset the evacuating flag */
         cur_pool->evacuating = 0;
 
-        next_pool = cur_pool->next;
+        /* make sure the last pool that wasn't evacuating doesn't point
+           to now empty pools that are freed */
+        if( last_pool ) {
+          last_pool->next = NULL;
+        }
+
+        pool* next_pool = cur_pool->next;
 
         pool_release(heap, cur_pool, sz_class);
 
+        last_pool = NULL;
         cur_pool = next_pool;
       }
       else
       {
+        last_pool = cur_pool;
         cur_pool = cur_pool->next;
       }
-      /* TODO: Snip out the next from the last non-evacuating pool that preceeds
-        an evacuating pool */
     }
   }
 

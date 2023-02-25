@@ -25,6 +25,7 @@
 #include "caml/fiber.h" /* for verification */
 #include "caml/gc.h"
 #include "caml/globroots.h"
+#include "caml/major_gc.h"
 #include "caml/memory.h"
 #include "caml/mlvalues.h"
 #include "caml/platform.h"
@@ -788,8 +789,20 @@ void caml_verify_heap(caml_domain_state *domain) {
   caml_stat_free(st);
 }
 
-static void update_field(void* ignored, value v, volatile value* p) {
+static inline void update_field(void* ignored, value v, volatile value* p) {
+  if (Is_block(v)) {
+    header_t vhd = Hd_val(v);
 
+    if( vhd <= SIZECLASS_MAX )
+    {
+      pool* vpool = caml_pool_of_shared_block(v);
+
+      if( vpool->evacuating ) {
+        /* Update v to point to the first field of v */
+        *p = Field(v, 0);
+      }
+    }
+  }
 }
 
 static void update_block(value* p) {
@@ -799,37 +812,23 @@ static void update_block(value* p) {
   if( hd != 0 ) {
     mlsize_t wosz = Whsize_hd(hd);
     mlsize_t i;
-    tag_t tag = Tag_hd(vhd);
     uintnat offset = 0;
 
     if ( tag == Cont_tag ) {
       value stk = Field(Val_hp(p), 0);
       if (Ptr_val(stk) != NULL) {
-        caml_scan_stack(&caml_darken, darken_scanning_flags, Caml_state,
-                    Ptr_val(stk), 0);
+        caml_scan_stack(&update_field, 0, NULL, Ptr_val(stk), 0);
       }
     } else {
       if ( tag == Closure_tag ) {
-        offset = Start_env_closinfo(Closinfo_val(block));
+        offset = Start_env_closinfo(Closinfo_val(Val_hp(p)));
       }
 
       if ( tag < No_scan_tag ) {
         for( i = offset; i < wosz; i++ ) {
           value v = Field(Val_hp(p), i);
 
-          if( Is_block(v) ) {
-            header_t vhd = Hd_val(v);
-
-            if( vhd <= SIZECLASS_MAX )
-            {
-              pool* vpool = caml_pool_of_shared_block(v);
-
-              if( vpool->evacuating ) {
-                /* Update the field */
-                Field(Val_hp(p), i) = Field(v, 0);
-              }
-            }
-          }
+          update_field(NULL, v, Op_hp(p)+i);
         }
       }
     }
@@ -837,11 +836,12 @@ static void update_block(value* p) {
 }
 
 static void compact_heap(caml_domain_state* domain_state, void* data, int participating_count, caml_domain_state** participants) {
-  int cycles;
+  uintnat saved_cycles = caml_major_cycles_completed;
+  uintnat cycles;
 
   /* Do three cycles so we know we have no garbage in the heap */
-  for( cycles = 0; cycles < 3 ; cycles++ ) {
-    finish_major_cycle_callback(domain_state, NULL, participating_count, participants);
+  for( cycles = saved_cycles; cycles < saved_cycles+3 ; cycles++ ) {
+    caml_finish_major_cycle_from_stw(cycles, domain_state, NULL, participating_count, participants);
   }
 
   /* Now we need a barrier and we proceed sequentially with our compaction */
@@ -864,9 +864,6 @@ static void compact_heap(caml_domain_state* domain_state, void* data, int partic
       value* p = (value*)((char*)cur_pool + POOL_HEADER_SZ);
       value* end = (value*)cur_pool + POOL_WSIZE;
       mlsize_t wh = wsize_sizeclass[sz_class];
-
-      /* Reset evacuating from any previous compact */
-      cur_pool->evacuating = 0;
 
       while (p + wh <= end) {
         header_t hd = (header_t)atomic_load_relaxed((atomic_uintnat*)p);
@@ -943,10 +940,18 @@ static void compact_heap(caml_domain_state* domain_state, void* data, int partic
     If it is then we update the field with the pointer in the block's first
     field */
 
-  barrier_status b = caml_global_barrier_begin();
+  b = caml_global_barrier_begin();
 
-  int sz_class;
+  /* First we do roots (locals and finalisers) */
+  caml_do_roots(&update_field, 0, NULL,
+    Caml_state, 1);
 
+  /* Next, one domain does the global roots */
+  if( participants[0] == Caml_state ) {
+    caml_scan_global_roots(&update_field, NULL);
+  }
+
+  /* Shared heap pools */
   for(sz_class = 0; sz_class < NUM_SIZECLASSES; sz_class++) {
     pool* cur_pool = Caml_state->shared_heap->avail_pools[sz_class];
 
@@ -956,10 +961,43 @@ static void compact_heap(caml_domain_state* domain_state, void* data, int partic
       mlsize_t wh = wsize_sizeclass[sz_class];
 
       while (p + wh <= end) {
-
+          update_block(p);
       }
 
       cur_pool = cur_pool->next;
+    }
+  }
+
+  /* Large allocations */
+  for( large_alloc* la = Caml_state->shared_heap->swept_large;
+        la != NULL; la = la->next ) {
+    value* p = (value*)((char*)la + LARGE_ALLOC_HEADER_SZ);
+    update_block(p);
+  }
+
+  /* TODO: ephemerons? */
+
+  caml_global_barrier_end(b);
+
+  /* Finally, each evacuating page needs to have it's flag reset and
+      be moved to the free list. Unfortunately this means a lot of
+      contention on the pool freelist lock. */
+
+  b = caml_global_barrier_begin();
+
+  for(sz_class = 0; sz_class < NUM_SIZECLASSES; sz_class++) {
+    pool* cur_pool = Caml_state->shared_heap->avail_pools[sz_class];
+
+    while( cur_pool != NULL ) {
+      if( cur_pool->evacuating ) {
+        /* Reset the evacuating flag */
+        cur_pool->evacuating = 0;
+
+        pool_release(Caml_state->shared_heap, cur_pool, sz_class);
+      }
+
+      cur_pool = cur_pool->next;
+    }
   }
 
   caml_global_barrier_end(b);

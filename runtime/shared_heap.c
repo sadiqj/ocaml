@@ -791,6 +791,8 @@ void caml_verify_heap(caml_domain_state *domain) {
 
 static inline void update_field(void* ignored, value v, volatile value* p) {
   if (Is_block(v)) {
+    CAMLassert(!Is_young(v));
+
     header_t vhd = Hd_val(v);
     mlsize_t vsize = Whsize_wosize(Wosize_val(v));
 
@@ -813,6 +815,9 @@ static void update_block(value* p) {
     mlsize_t i;
     uintnat offset = 0;
 
+    /* We don't support ephemerons yet */
+    CAMLassert( tag != Abstract_tag );
+
     if ( tag == Cont_tag ) {
       value stk = Field(Val_hp(p), 0);
       if (Ptr_val(stk) != NULL) {
@@ -825,14 +830,46 @@ static void update_block(value* p) {
 
       if ( tag < No_scan_tag ) {
         for( i = offset; i < wosz; i++ ) {
-          value v = Field(Val_hp(p), i);
-
-          update_field(NULL, v, Op_hp(p)+i);
+          update_field(NULL, Field(Val_hp(p), i), &Field(Val_hp(p), i));
         }
       }
     }
   }
 }
+
+#ifdef DEBUG
+static inline void check_field(void* ignored, value v, volatile value* p) {
+  if( Is_block(v) ) {
+    CAMLassert(!is_garbage(v));
+  }
+}
+
+static inline void check_block(value* p) {
+  header_t hd = Hd_hp(p);
+  tag_t tag = Tag_hd(hd);
+  mlsize_t wosize = Wosize_hd(hd);
+  int offset = 0;
+
+  if( tag == Cont_tag ) {
+    value stk = Field(Val_hp(p), 0);
+    if (Ptr_val(stk) != NULL) {
+      caml_scan_stack(&check_field, 0, NULL, Ptr_val(stk), 0);
+    }
+  } else {
+    if ( tag == Closure_tag ) {
+      offset = Start_env_closinfo(Closinfo_val(Val_hp(p)));
+    }
+
+    if( tag < No_scan_tag ) {
+      int i;
+
+      for( i = offset ; i < wosize ; i++ ) {
+        check_field(NULL, Field(Val_hp(p), i), &Field(Val_hp(p), i));
+      }
+    }
+  }
+}
+#endif
 
 static void compact_heap(caml_domain_state* domain_state, void* data, int participating_count, caml_domain_state** participants) {
   uintnat saved_cycles = caml_major_cycles_completed;
@@ -883,8 +920,6 @@ static void compact_heap(caml_domain_state* domain_state, void* data, int partic
 
       cur_pool = cur_pool->next;
     }
-
-    // printf("Size class %d has %d live blocks out of %d total blocks, %d total pools\n", sz_class, live_blocks, total_blocks, total_pools);
 
     /* cur_pool is now the pool we're allocating in to */
     cur_pool = heap->unswept_avail_pools[sz_class];
@@ -943,7 +978,8 @@ static void compact_heap(caml_domain_state* domain_state, void* data, int partic
           Field(Val_hp(p), 0) = Val_hp(new_p);
 
           /* Update the header so it's garbage */
-          atomic_store_relaxed((atomic_uintnat*)p, With_status_hd(hd, caml_global_heap_state.GARBAGE));
+          atomic_store_relaxed((atomic_uintnat*)p,
+            With_status_hd(hd, caml_global_heap_state.GARBAGE));
         }
 
         p += wh;
@@ -1063,6 +1099,73 @@ static void compact_heap(caml_domain_state* domain_state, void* data, int partic
   }
 
   caml_global_barrier_end(b);
+
+  #ifdef DEBUG
+  b = caml_global_barrier_begin();
+
+  /* First we do roots (locals and finalisers) */
+  caml_do_roots(&check_field, 0, NULL, Caml_state, 1);
+
+  /* Next, one domain does the global roots */
+  if( participants[0] == Caml_state ) {
+    caml_scan_global_roots(&check_field, NULL);
+  }
+
+  /* Shared heap pools. */
+  for(sz_class = 1; sz_class < NUM_SIZECLASSES; sz_class++) {
+    pool* cur_pool = heap->unswept_avail_pools[sz_class];
+
+    /* Iterate through pools updating the fields in each live block,
+      stop once we reach our first evacuating pool. */
+    while( cur_pool != NULL ) {
+      CAMLassert(!cur_pool->evacuating);
+      value* p = (value*)((char*)cur_pool + POOL_HEADER_SZ);
+      value* end = (value*)cur_pool + POOL_WSIZE;
+      mlsize_t wh = wsize_sizeclass[sz_class];
+
+      while (p + wh <= end) {
+        if( *p != 0 ) {
+          check_block(p);
+        }
+          p += wh;
+      }
+
+      cur_pool = cur_pool->next;
+    }
+
+    /* do the same for full pools */
+    cur_pool = heap->unswept_full_pools[sz_class];
+
+    while( cur_pool != NULL ) {
+      CAMLassert(!cur_pool->evacuating);
+
+      value* p = (value*)((char*)cur_pool + POOL_HEADER_SZ);
+      value* end = (value*)cur_pool + POOL_WSIZE;
+      mlsize_t wh = wsize_sizeclass[sz_class];
+
+      while (p + wh <= end) {
+        if( *p != 0 ) {
+          check_block(p);
+        }
+        p += wh;
+      }
+
+      cur_pool = cur_pool->next;
+    }
+  }
+
+  /* Large allocations */
+  for( large_alloc* la = heap->swept_large;
+        la != NULL; la = la->next ) {
+    value* p = (value*)((char*)la + LARGE_ALLOC_HEADER_SZ);
+
+    check_block(p);
+  }
+
+  /* TODO: ephemerons? */
+
+  caml_global_barrier_end(b);
+  #endif
 }
 
 void caml_shared_compact(void) {

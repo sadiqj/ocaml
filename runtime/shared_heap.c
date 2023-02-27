@@ -840,8 +840,11 @@ static void update_block(value* p) {
 
 #ifdef DEBUG
 static inline void check_field(void* ignored, value v, volatile value* p) {
-  if( Is_block(v) ) {
-    CAMLassert(!is_garbage(v) && !is_unmarked(v));
+  if( Is_block(v) && !Is_young(v) ) {
+    if( is_garbage(v) ) {
+      printf("Found garbage value %ld in field %p, tag: %d, size: %ld\n", v, p, Tag_val(v), Wosize_val(v));
+    }
+    CAMLassert(!is_garbage(v));
   }
 }
 
@@ -850,6 +853,8 @@ static inline void check_block(value* p) {
   tag_t tag = Tag_hd(hd);
   mlsize_t wosize = Wosize_hd(hd);
   int offset = 0;
+
+  CAMLassert( tag != Infix_tag );
 
   if( tag == Cont_tag ) {
     value stk = Field(Val_hp(p), 0);
@@ -881,6 +886,11 @@ static void compact_heap(caml_domain_state* domain_state, void* data, int partic
     caml_finish_major_cycle_from_stw(cycles, domain_state, participating_count,
       participants);
   }
+
+  /* Everyone clear their mark stacks. The heap should now comprise of only
+     things MARKED, there should be no UNMARKED or GARBAGE. This also saves us
+     from having to forward pointers in the mark stack. */
+  caml_empty_mark_stack();
 
   /* Now we need a barrier and we proceed sequentially with our compaction */
   barrier_status b = caml_global_barrier_begin();

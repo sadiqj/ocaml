@@ -86,6 +86,12 @@ static void clear_table (struct generic_table *tbl)
 {
     tbl->ptr = tbl->base;
     tbl->limit = tbl->threshold;
+
+    #ifdef DEBUG
+    for(char* p = tbl->base; p < tbl->threshold; p++) {
+      *p = 0;
+    }
+    #endif
 }
 
 struct caml_minor_tables* caml_alloc_minor_tables(void)
@@ -727,6 +733,7 @@ caml_stw_empty_minor_heap_no_major_slice(caml_domain_state* domain,
   CAML_EV_BEGIN(EV_MINOR_CLEAR);
   caml_gc_log("running stw empty_minor_heap_domain_clear");
   caml_empty_minor_heap_domain_clear(domain);
+
 #ifdef DEBUG
   {
     for (uintnat* p = initial_young_ptr; p < (uintnat*)domain->young_end; ++p)
@@ -797,6 +804,10 @@ void caml_empty_minor_heaps_once (void)
   do {
     caml_try_stw_empty_minor_heap_on_all_domains();
   } while (saved_minor_cycle == atomic_load(&caml_minor_cycles_started));
+
+  /*if(getenv("DEBUG_COMPACT") != NULL) {
+    caml_finish_major_cycle(1);
+  }*/
 }
 
 /* Called by minor allocations when [Caml_state->young_ptr] reaches

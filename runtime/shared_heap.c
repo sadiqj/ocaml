@@ -1425,5 +1425,7 @@ void caml_cycle_heap(struct caml_heap_state* local) {
     caml_gc_log("Received %d new pools, %d new large allocs",
                 received_p, received_l);
 
+  free_pool_freelist();
+
   local->next_to_sweep = 0;
 }

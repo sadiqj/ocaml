@@ -1371,7 +1371,7 @@ static void stw_cycle_all_domains(caml_domain_state* domain, void* args,
 
   /* Compact here if requested (or, eventually, if the heap overhead is too
       high). */
-  if( params->force_compaction ) {
+  if (params->force_compaction) {
     caml_compact_heap(domain, NULL, participating_count, participating);
   }
 
@@ -1843,7 +1843,8 @@ void caml_finish_major_cycle (int force_compaction)
 }
 
 #ifdef DEBUG
-int caml_mark_stack_is_empty(void) {
+int caml_mark_stack_is_empty(void)
+{
   return Caml_state->mark_stack->count == 0;
 }
 #endif

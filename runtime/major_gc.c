@@ -53,8 +53,7 @@ struct mark_stack {
 uintnat caml_percent_free;
 static uintnat marked_words, heap_wsz_at_cycle_start;
 uintnat caml_major_heap_increment;
-CAMLexport char *caml_heap_start;
-char *caml_gc_sweep_hp;
+
 int caml_gc_phase;        /* always Phase_mark, Pase_clean,
                              Phase_sweep, or Phase_idle */
 uintnat caml_allocated_words;
@@ -670,6 +669,7 @@ static void mark_slice (intnat work)
       CAML_EV_END(EV_MAJOR_MARK_ROOTS);
       if (work > 0){
         caml_gc_subphase = Subphase_mark_main;
+        caml_gc_message (0x40, "Changing subphase = %d\n", caml_gc_subphase);
       }
     } else if (*ephes_to_check != (value) NULL) {
       /* Continue to scan the list of ephe */

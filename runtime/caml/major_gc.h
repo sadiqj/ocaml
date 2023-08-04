@@ -55,9 +55,7 @@ extern int caml_ephe_list_pure;
    since they must be available for their finalizer.
   */
 
-CAMLextern char *caml_heap_start;
 extern uintnat total_heap_size;
-extern char *caml_gc_sweep_hp;
 
 extern int caml_major_window;
 extern double caml_major_ring[Max_major_window];

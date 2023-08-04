@@ -52,13 +52,7 @@ extern uintnat caml_percent_free;                   /* major_gc.c */
 
 CAMLexport color_t caml_allocation_color (void *hp)
 {
-  if (caml_gc_phase == Phase_mark || caml_gc_phase == Phase_clean){
-    return Caml_black;
-  }else{
-    CAMLassert (caml_gc_phase == Phase_idle
-            || (caml_gc_phase == Phase_sweep));
-    return Caml_white;
-  }
+  return Caml_black;
 }
 
 Caml_inline value caml_alloc_shr_aux (mlsize_t wosize, tag_t tag, int track,
@@ -73,15 +67,8 @@ Caml_inline value caml_alloc_shr_aux (mlsize_t wosize, tag_t tag, int track,
   CAMLassert (Is_in_heap (Val_hp (hp)));
 
   /* Inline expansion of caml_allocation_color. */
-  if (caml_gc_phase == Phase_mark || caml_gc_phase == Phase_clean ||
-      (caml_gc_phase == Phase_sweep && (char *)hp >= (char *)caml_gc_sweep_hp)){
-    Hd_hp (hp) = Make_header_with_profinfo (wosize, tag, Caml_black, profinfo);
-  }else{
-    CAMLassert (caml_gc_phase == Phase_idle
-            || (caml_gc_phase == Phase_sweep
-                && (char *)hp < (char *)caml_gc_sweep_hp));
-    Hd_hp (hp) = Make_header_with_profinfo (wosize, tag, Caml_white, profinfo);
-  }
+  Hd_hp (hp) = Make_header_with_profinfo (wosize, tag, Caml_black, profinfo);
+
   CAMLassert (Hd_hp (hp)
     == Make_header_with_profinfo (wosize, tag, caml_allocation_color (hp),
                                   profinfo));

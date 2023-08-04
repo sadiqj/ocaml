@@ -393,6 +393,9 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
       } else {
         /* still live, the pool can't be released to the global freelist */
         release_to_global_pool = 0;
+
+        /* reset the colour to white */
+        Hd_hp(p) = Whitehd_hd(hd);
       }
       p += wh;
       work += wh;

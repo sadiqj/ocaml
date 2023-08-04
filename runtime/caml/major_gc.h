@@ -28,21 +28,6 @@ typedef struct {
   value* end;
 } mark_entry;
 
-typedef struct {
-  void *block;           /* address of the malloced block this chunk lives in */
-  asize_t allocated;     /* in bytes, used for compaction */
-  asize_t size;          /* in bytes */
-  char *next;
-  mark_entry redarken_first;  /* first block in chunk to redarken */
-  value* redarken_end;     /* one-past-end of last block for redarkening */
-} heap_chunk_head;
-
-#define Chunk_head(c) (((heap_chunk_head *) (c)) - 1)
-#define Chunk_size(c) Chunk_head(c)->size
-#define Chunk_alloc(c) Chunk_head(c)->allocated
-#define Chunk_next(c) Chunk_head(c)->next
-#define Chunk_block(c) Chunk_head(c)->block
-
 extern int caml_gc_phase;
 extern int caml_gc_subphase;
 extern uintnat caml_allocated_words;

@@ -61,11 +61,6 @@ uintnat caml_allocated_words;
 uintnat caml_dependent_size, caml_dependent_allocated;
 double caml_extra_heap_resources;
 
-/* redarken_first_chunk is the first chunk needing redarkening, if NULL no
-  redarkening required */
-static char *redarken_first_chunk = NULL;
-
-static char *sweep_chunk;
 static double p_backlog = 0.0; /* backlog for the gc speedup parameter */
 
 int caml_gc_subphase;     /* Subphase_{mark_roots,mark_main,mark_final} */
@@ -128,74 +123,22 @@ int caml_naked_pointers_detected = 0;
 
 void (*caml_major_gc_hook)(void) = NULL;
 
-/* This function prunes the mark stack if it's about to overflow. It does so
-   by building a skiplist of major heap chunks and then iterating through the
-   mark stack and setting redarken_start/redarken_end on each chunk to indicate
-   the range that requires redarkening. */
-static void mark_stack_prune (struct mark_stack* stk)
-{
-  int entry;
-  uintnat mark_stack_count = stk->count;
-  mark_entry* mark_stack = stk->stack;
-
-  char* heap_chunk = caml_heap_start;
-  struct skiplist chunk_sklist = SKIPLIST_STATIC_INITIALIZER;
-
-  do {
-    caml_skiplist_insert(&chunk_sklist, (uintnat)heap_chunk,
-                          (uintnat)(heap_chunk+Chunk_size(heap_chunk)));
-    heap_chunk = Chunk_next(heap_chunk);
-  } while( heap_chunk != NULL );
-
-  for( entry = 0; entry < mark_stack_count ; entry++ ) {
-    mark_entry me = mark_stack[entry];
-    uintnat chunk_addr = 0, chunk_addr_below = 0;
-
-    if( caml_skiplist_find_below(&chunk_sklist, (uintnat)me.start,
-          &chunk_addr, &chunk_addr_below)
-        && (uintnat)me.start < chunk_addr_below ) {
-      heap_chunk_head* ch = Chunk_head(chunk_addr);
-      if (ch->redarken_first.start > me.start)
-        ch->redarken_first = me;
-
-      if (ch->redarken_end < me.end)
-        ch->redarken_end = me.end;
-
-      if( redarken_first_chunk == NULL
-          || redarken_first_chunk > (char*)chunk_addr ) {
-        redarken_first_chunk = (char*)chunk_addr;
-      }
-    }
-  }
-
-  caml_skiplist_empty(&chunk_sklist);
-
-  caml_gc_message(0x08, "Mark stack overflow.\n");
-
-  stk->count = 0;
-}
-
 static void realloc_mark_stack (struct mark_stack* stk)
 {
   mark_entry* new;
   uintnat mark_stack_bsize = stk->size * sizeof(mark_entry);
 
-  if ( Wsize_bsize(mark_stack_bsize) < Caml_state->stat_heap_wsz / 64 ) {
-    caml_gc_message (0x08, "Growing mark stack to %"
-                           ARCH_INTNAT_PRINTF_FORMAT "uk bytes\n",
-                     (intnat) mark_stack_bsize * 2 / 1024);
+  caml_gc_message (0x08, "Growing mark stack to %"
+                          ARCH_INTNAT_PRINTF_FORMAT "uk bytes\n",
+                    (intnat) mark_stack_bsize * 2 / 1024);
 
-    new = (mark_entry*) caml_stat_resize_noexc ((char*) stk->stack,
-                                                2 * mark_stack_bsize);
-    if (new != NULL) {
-      stk->stack = new;
-      stk->size *= 2;
-      return;
-    }
+  new = (mark_entry*) caml_stat_resize_noexc ((char*) stk->stack,
+                                              2 * mark_stack_bsize);
+  if (new != NULL) {
+    stk->stack = new;
+    stk->size *= 2;
+    return;
   }
-
-  caml_gc_message (0x08, "No room for growing mark stack. Pruning..\n");
-  mark_stack_prune(stk);
 }
 
 /* This function pushes the provided mark_entry [me] onto the current mark
@@ -331,74 +274,10 @@ void caml_shrink_mark_stack () {
   }
 }
 
-/* This function adds blocks in the passed heap chunk [heap_chunk] to
-   the mark stack. It returns 1 when the supplied chunk has no more
-   range to redarken.  It returns 0 if there are still blocks in the
-   chunk that need redarkening because pushing them onto the stack
-   would make it grow more than a quarter full. This is to lower the
-   chance of triggering another overflow, which would be
-   wasteful. Subsequent calls will continue progress.
- */
-static int redarken_chunk(char* heap_chunk, struct mark_stack* stk) {
-  heap_chunk_head* chunk = Chunk_head(heap_chunk);
-  mark_entry me = chunk->redarken_first;
-  header_t* end = (header_t*)chunk->redarken_end;
-  if (chunk->redarken_end <= me.start) return 1;
-
-  while (1) {
-    header_t* hp;
-    /* Skip a prefix of fields that need no marking */
-    CAMLassert(me.start <= me.end && (header_t*)me.end <= end);
-    while (me.start < me.end &&
-           (!Is_block(*me.start) || Is_young(*me.start))) {
-      me.start++;
-    }
-
-    /* Push to the mark stack (if anything's left) */
-    if (me.start < me.end) {
-      if (stk->count < stk->size/4) {
-        stk->stack[stk->count++] = me;
-      } else {
-        /* Only fill up a quarter of the mark stack, we can resume later
-           for more if we need to */
-        chunk->redarken_first = me;
-        return 0;
-      }
-    }
-
-    /* Find the next block that needs to be re-marked */
-    hp = (header_t*)me.end;
-    CAMLassert(hp <= end);
-    while (hp < end) {
-      value v = Val_hp(hp);
-      if (Tag_val(v) < No_scan_tag && Is_black_val(v))
-        break;
-      hp = (header_t*)(Op_val(v) + Wosize_val(v));
-    }
-    if (hp == end)
-      break;
-
-    /* Found a block */
-    me.start = Op_hp(hp);
-    me.end = me.start + Wosize_hp(hp);
-    if (Tag_hp(hp) == Closure_tag) {
-      me.start += Start_env_closinfo(Closinfo_val(Val_hp(hp)));
-    }
-  }
-
-  chunk->redarken_first.start =
-      (value*)(heap_chunk + Chunk_size(heap_chunk));
-  chunk->redarken_first.end = chunk->redarken_first.start;
-  chunk->redarken_end = (value*)heap_chunk;
-
-  return 1;
-}
-
 static void start_cycle (void)
 {
   CAMLassert (caml_gc_phase == Phase_idle);
   CAMLassert (Caml_state->mark_stack->count == 0);
-  CAMLassert (redarken_first_chunk == NULL);
   caml_gc_message (0x01, "Starting new major GC cycle\n");
   marked_words = 0;
   caml_darken_all_roots_start ();
@@ -418,10 +297,7 @@ static void init_sweep_phase(void)
 {
   /* Phase_clean is done. */
   /* Initialise the sweep phase. */
-  caml_gc_sweep_hp = caml_heap_start;
   caml_gc_phase = Phase_sweep;
-  sweep_chunk = caml_heap_start;
-  caml_gc_sweep_hp = sweep_chunk;
 
   if (caml_major_gc_hook) (*caml_major_gc_hook)();
 }
@@ -665,6 +541,7 @@ Caml_noinline static intnat do_some_marking
         continue;
       }
       hd = Blackhd_hd (hd);
+      caml_gc_message(0x40, "Marking block %ld\n", block);
       Hd_val (block) = hd;
       darkened_anything = 1;
       work--; /* header word */
@@ -785,13 +662,7 @@ static void mark_slice (intnat work)
 
     CAMLassert (stk->count == 0);
 
-    if( redarken_first_chunk != NULL ) {
-      /* There are chunks that need to be redarkened because we
-         overflowed our mark stack */
-      if( redarken_chunk(redarken_first_chunk, stk) ) {
-        redarken_first_chunk = Chunk_next(redarken_first_chunk);
-      }
-    } else if (caml_gc_subphase == Subphase_mark_roots) {
+    if (caml_gc_subphase == Subphase_mark_roots) {
       CAML_EV_BEGIN(EV_MAJOR_MARK_ROOTS);
       marked_words -= work;
       work = caml_darken_all_roots_slice (work);
@@ -1141,35 +1012,10 @@ void caml_finish_major_cycle (void)
   while (caml_gc_phase == Phase_mark) mark_slice (LONG_MAX);
   while (caml_gc_phase == Phase_clean) clean_slice (LONG_MAX);
   CAMLassert (caml_gc_phase == Phase_sweep);
-  CAMLassert (redarken_first_chunk == NULL);
   while (caml_gc_phase == Phase_sweep) sweep_slice (LONG_MAX);
   CAMLassert (caml_gc_phase == Phase_idle);
   Caml_state->stat_major_words += caml_allocated_words;
   caml_allocated_words = 0;
-}
-
-/* Call this function to make sure [bsz] is greater than or equal
-   to both [Heap_chunk_min] and the current heap increment.
-*/
-asize_t caml_clip_heap_chunk_wsz (asize_t wsz)
-{
-  asize_t result = wsz;
-  uintnat incr;
-
-  /* Compute the heap increment as a word size. */
-  if (caml_major_heap_increment > 1000){
-    incr = caml_major_heap_increment;
-  }else{
-    incr = Caml_state->stat_heap_wsz / 100 * caml_major_heap_increment;
-  }
-
-  if (result < incr){
-    result = incr;
-  }
-  if (result < Heap_chunk_min){
-    result = Heap_chunk_min;
-  }
-  return result;
 }
 
 /* [heap_size] is a number of bytes */
@@ -1177,17 +1023,10 @@ void caml_init_major_heap (asize_t heap_size)
 {
   int i;
 
-  Caml_state->stat_heap_wsz =
-    caml_clip_heap_chunk_wsz (Wsize_bsize (heap_size));
+  Caml_state->stat_heap_wsz = 0;
   Caml_state->stat_top_heap_wsz = Caml_state->stat_heap_wsz;
   CAMLassert (Bsize_wsize (Caml_state->stat_heap_wsz) % Page_size == 0);
-  caml_heap_start =
-    (char *) caml_alloc_for_heap (Bsize_wsize (Caml_state->stat_heap_wsz));
-  if (caml_heap_start == NULL)
-    caml_fatal_error ("cannot allocate initial major heap");
-  Chunk_next (caml_heap_start) = NULL;
-  Caml_state->stat_heap_wsz = Wsize_bsize (Chunk_size (caml_heap_start));
-  Caml_state->stat_heap_chunks = 1;
+
   Caml_state->stat_top_heap_wsz = Caml_state->stat_heap_wsz;
 
   Caml_state->shared_heap = caml_init_shared_heap();
@@ -1238,8 +1077,6 @@ void caml_finalise_heap (void)
 
   /* Finalising all values (by means of forced sweeping) */
   caml_gc_phase = Phase_sweep;
-  sweep_chunk = caml_heap_start;
-  caml_gc_sweep_hp = sweep_chunk;
   while (caml_gc_phase == Phase_sweep)
     sweep_slice (LONG_MAX);
 }

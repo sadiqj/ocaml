@@ -49,72 +49,6 @@ extern uintnat caml_custom_minor_max_bsz; /* see custom.c */
 
 #define Next(hp) ((header_t *)(hp) + Whsize_hp (hp))
 
-#ifdef DEBUG
-
-/* Check that [v]'s header looks good.  [v] must be a block in the heap. */
-static void check_head (value v)
-{
-  CAMLassert (Is_block (v));
-  CAMLassert (Is_in_heap (v));
-
-  CAMLassert (Wosize_val (v) != 0);
-  CAMLassert (Color_hd (Hd_val (v)) != Caml_blue);
-  CAMLassert (Is_in_heap (v));
-  if (Tag_val (v) == Infix_tag){
-    int offset = Wsize_bsize (Infix_offset_val (v));
-    value trueval = Val_op (&Field (v, -offset));
-    CAMLassert (Tag_val (trueval) == Closure_tag);
-    CAMLassert (Wosize_val (trueval) > offset);
-    CAMLassert (Is_in_heap (&Field (trueval, Wosize_val (trueval) - 1)));
-  }else{
-    CAMLassert (Is_in_heap (&Field (v, Wosize_val (v) - 1)));
-  }
-  if (Tag_val (v) ==  Double_tag){
-    CAMLassert (Wosize_val (v) == Double_wosize);
-  }else if (Tag_val (v) == Double_array_tag){
-    CAMLassert (Wosize_val (v) % Double_wosize == 0);
-  }
-}
-
-static void check_block (header_t *hp)
-{
-  mlsize_t i;
-  value v = Val_hp (hp);
-  value f;
-
-  check_head (v);
-  switch (Tag_hp (hp)){
-  case Abstract_tag: break;
-  case String_tag:
-    break;
-  case Double_tag:
-    CAMLassert (Wosize_val (v) == Double_wosize);
-    break;
-  case Double_array_tag:
-    CAMLassert (Wosize_val (v) % Double_wosize == 0);
-    break;
-  case Custom_tag:
-    CAMLassert (!Is_in_heap (Custom_ops_val (v)));
-    break;
-
-  case Infix_tag:
-    CAMLassert (0);
-    break;
-
-  default:
-    CAMLassert (Tag_hp (hp) < No_scan_tag);
-    for (i = 0; i < Wosize_hp (hp); i++){
-      f = Field (v, i);
-      if (Is_block (f) && Is_in_heap (f)){
-        check_head (f);
-        CAMLassert (Color_val (f) != Caml_blue);
-      }
-    }
-  }
-}
-
-#endif /* DEBUG */
-
 /* Check the heap structure (if compiled in debug mode) and
    gather statistics; return the stats if [returnstats] is true,
    otherwise return [Val_unit].
@@ -125,96 +59,16 @@ static value heap_stats (int returnstats)
   intnat live_words = 0, live_blocks = 0,
          free_words = 0, free_blocks = 0, largest_free = 0,
          fragments = 0, heap_chunks = 0;
-  char *chunk = caml_heap_start, *chunk_end;
-  header_t *cur_hp;
-#ifdef DEBUG
-  header_t *prev_hp;
-#endif
-  header_t cur_hd;
 
 #ifdef DEBUG
   caml_gc_message (-1, "### OCaml runtime: heap check ###\n");
 #endif
 
-  while (chunk != NULL){
-    ++ heap_chunks;
-    chunk_end = chunk + Chunk_size (chunk);
-#ifdef DEBUG
-    prev_hp = NULL;
-#endif
-    cur_hp = (header_t *) chunk;
-    while (cur_hp < (header_t *) chunk_end){
-      cur_hd = Hd_hp (cur_hp);
-      CAMLassert (Next (cur_hp) <= (header_t *) chunk_end);
-      switch (Color_hd (cur_hd)){
-      case Caml_white:
-        if (Wosize_hd (cur_hd) == 0){
-          ++ fragments;
-          CAMLassert (prev_hp == NULL
-                      || Color_hp (prev_hp) != Caml_blue
-                      || cur_hp == (header_t *) caml_gc_sweep_hp
-                      || Wosize_hp (prev_hp) == Max_wosize);
-        }else{
-          if (caml_gc_phase == Phase_sweep
-              && cur_hp >= (header_t *) caml_gc_sweep_hp){
-            ++ free_blocks;
-            free_words += Whsize_hd (cur_hd);
-            if (Whsize_hd (cur_hd) > largest_free){
-              largest_free = Whsize_hd (cur_hd);
-            }
-          }else{
-            ++ live_blocks;
-            live_words += Whsize_hd (cur_hd);
-#ifdef DEBUG
-            check_block (cur_hp);
-#endif
-          }
-        }
-        break;
-      case Caml_black:
-        CAMLassert (Wosize_hd (cur_hd) > 0);
-        ++ live_blocks;
-        live_words += Whsize_hd (cur_hd);
-#ifdef DEBUG
-        check_block (cur_hp);
-#endif
-        break;
-      case Caml_blue:
-        CAMLassert (Wosize_hd (cur_hd) > 0);
-        ++ free_blocks;
-        free_words += Whsize_hd (cur_hd);
-        if (Whsize_hd (cur_hd) > largest_free){
-          largest_free = Whsize_hd (cur_hd);
-        }
-        /* not true any more with big heap chunks
-        CAMLassert (prev_hp == NULL
-                    || (Color_hp (prev_hp) != Caml_blue
-                        && Wosize_hp (prev_hp) > 0)
-                    || cur_hp == caml_gc_sweep_hp);
-        CAMLassert (Next (cur_hp) == chunk_end
-                    || (Color_hp (Next (cur_hp)) != Caml_blue
-                       && Wosize_hp (Next (cur_hp)) > 0)
-                    || (Whsize_hd (cur_hd) + Wosize_hp (Next (cur_hp))
-                       > Max_wosize)
-                    || Next (cur_hp) == caml_gc_sweep_hp);
-        */
-        break;
-      }
-#ifdef DEBUG
-      prev_hp = cur_hp;
-#endif
-      cur_hp = Next (cur_hp);
-    }
-    CAMLassert (cur_hp == (header_t *) chunk_end);
-    chunk = Chunk_next (chunk);
-  }
+/* The GC stats will not be correct. */
 
 #ifdef DEBUG
   caml_final_invariant_check();
 #endif
-
-  CAMLassert (heap_chunks == Caml_state->stat_heap_chunks);
-  CAMLassert (live_words + free_words + fragments == Caml_state->stat_heap_wsz);
 
   if (returnstats){
     CAMLlocal1 (res);
@@ -643,7 +497,7 @@ void caml_init_gc (uintnat minor_size, uintnat major_size,
                    uintnat custom_bsz, uintnat policy)
 {
   uintnat major_bsize;
-  if (major_size < Heap_chunk_min) major_size = Heap_chunk_min;
+
   major_bsize = Bsize_wsize(major_size);
   major_bsize = ((major_bsize + Page_size - 1) >> Page_log) << Page_log;
 

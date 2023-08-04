@@ -194,11 +194,6 @@ extern uintnat caml_use_huge_pages;
     (((x) + (Heap_page_size - 1)) & ~ (Heap_page_size - 1))
 #endif
 
-
-int caml_page_table_add(int kind, void * start, void * end);
-int caml_page_table_remove(int kind, void * start, void * end);
-int caml_page_table_initialize(mlsize_t bytesize);
-
 #ifdef DEBUG
 #define DEBUG_clear(result, wosize) do{ \
   uintnat caml__DEBUG_i; \

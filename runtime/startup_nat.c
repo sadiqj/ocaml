@@ -59,15 +59,6 @@ static void init_static(void)
 
   caml_init_atom_table ();
 
-  for (i = 0; caml_data_segments[i].begin != 0; i++) {
-    /* PR#5509: we must include the zero word at end of data segment,
-       because pointers equal to caml_data_segments[i].end are static data. */
-    if (caml_page_table_add(In_static_data,
-                            caml_data_segments[i].begin,
-                            caml_data_segments[i].end + sizeof(value)) != 0)
-      caml_fatal_error("not enough memory for initial page table");
-  }
-
   caml_code_area_start = caml_code_segments[0].begin;
   caml_code_area_end = caml_code_segments[0].end;
   for (i = 1; caml_code_segments[i].begin != 0; i++) {

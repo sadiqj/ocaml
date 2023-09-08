@@ -183,7 +183,7 @@ static pool* pool_acquire(struct caml_heap_state* local) {
 
   caml_plat_lock(&pool_freelist.lock);
   if (!pool_freelist.free) {
-    void* mem = malloc(Bsize_wsize(POOL_WSIZE));
+    void* mem = caml_mem_map(Bsize_wsize(POOL_WSIZE), 0);
 
     if (mem) {
       CAMLassert(pool_freelist.free == NULL);
@@ -226,7 +226,7 @@ static void pool_free(struct caml_heap_state* local,
     CAMLassert(pool->sz == sz);
     local->stats.pool_words -= POOL_WSIZE;
     local->stats.pool_frag_words -= POOL_HEADER_WSIZE + wastage_sizeclass[sz];
-    free(pool);
+    caml_mem_unmap(pool, Bsize_wsize(POOL_WSIZE));
 }
 
 static void calc_pool_stats(pool* a, sizeclass sz, struct heap_stats* s)
@@ -1216,7 +1216,7 @@ void caml_compact_heap(caml_domain_state* domain_state,
     while( cur_pool ) {
       next_pool = cur_pool->next;
       /* No stats to update so just unmap */
-      free(cur_pool);
+      caml_mem_unmap(cur_pool, Bsize_wsize(POOL_WSIZE));
       cur_pool = next_pool;
     }
 

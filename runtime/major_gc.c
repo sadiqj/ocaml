@@ -298,6 +298,8 @@ static void init_sweep_phase(void)
   /* Initialise the sweep phase. */
   caml_gc_phase = Phase_sweep;
 
+  caml_cycle_heap(Caml_state->shared_heap);
+
   if (caml_major_gc_hook) (*caml_major_gc_hook)();
 }
 

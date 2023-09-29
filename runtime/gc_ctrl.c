@@ -60,6 +60,8 @@ static value heap_stats (int returnstats)
          free_words = 0, free_blocks = 0, largest_free = 0,
          fragments = 0, heap_chunks = 0;
 
+caml_shared_heap_stats(&live_words, &live_blocks, &free_words, &largest_free, &fragments, &heap_chunks);
+
 #ifdef DEBUG
   caml_gc_message (-1, "### OCaml runtime: heap check ###\n");
 #endif

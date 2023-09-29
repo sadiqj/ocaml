@@ -136,6 +136,122 @@ void caml_teardown_shared_heap(struct caml_heap_state* heap) {
   caml_stat_free(heap);
 }
 
+/* macro takes block_func and runs it for each pool in plist and calls it for
+   each block (advancing by the sizeclass width each time)*/
+#define ITER_POOLS_BLOCKS(plist, block_func) \
+  do { \
+    pool* a; \
+    for (a = (plist); a; a = a->next) { \
+      value* p = (value*)((char*)a + POOL_HEADER_SZ); \
+      value* end = (value*)a + POOL_WSIZE; \
+      mlsize_t wh = wsize_sizeclass[a->sz]; \
+      while (p + wh <= end) { \
+        block_func; \
+        p += wh; \
+      } \
+    } \
+  } while(0)
+
+/* caml_shared_heap_stats(&live_words, &live_blocks, &free_words, &largest_free, &fragments, &heap_chunks); */
+void caml_shared_heap_stats(intnat* live_words, intnat* live_blocks,
+                            intnat* free_words, intnat* largest_free,
+                            intnat* fragments, intnat* heap_chunks) {
+  int i;
+  intnat live = 0, live_blks = 0, free = 0, largest = 0, frags = 0, chunks = 0;
+  struct caml_heap_state* heap = Caml_state->shared_heap;
+
+  for (i = 0; i < NUM_SIZECLASSES; i++) {
+    /* we need to go through (via ITER_POOLS_BLOCKS):
+      pool_freelist.global_avail_pools
+      pool_freelist.global_free_pools
+      Caml_state->shared_heap->avail_pools
+      Caml_state->shared_heap->full_pools
+      Caml_state->shared_heap->unswept_avail_pools
+      Caml_state->shared_heap->unswept_full_pools
+    */
+    ITER_POOLS_BLOCKS(pool_freelist.global_avail_pools[i], {
+      if (Hd_hp(p) != 0) {
+        live += wh;
+        live_blks++;
+      } else {
+        free += wh;
+      }
+    });
+
+    ITER_POOLS_BLOCKS(pool_freelist.global_full_pools[i], {
+      if (Hd_hp(p) != 0) {
+        live += wh;
+        live_blks++;
+      } else {
+        free += wh;
+      }
+    });
+
+    ITER_POOLS_BLOCKS(heap->avail_pools[i], {
+      if (Hd_hp(p) != 0) {
+        live += wh;
+        live_blks++;
+      } else {
+        free += wh;
+      }
+    });
+
+    ITER_POOLS_BLOCKS(heap->full_pools[i], {
+      if (Hd_hp(p) != 0) {
+        live += wh;
+        live_blks++;
+      } else {
+        free += wh;
+      }
+    });
+
+    ITER_POOLS_BLOCKS(heap->unswept_avail_pools[i], {
+      if (Hd_hp(p) != 0) {
+        live += wh;
+        live_blks++;
+      } else {
+        free += wh;
+      }
+    });
+
+    ITER_POOLS_BLOCKS(heap->unswept_full_pools[i], {
+      if (Hd_hp(p) != 0) {
+        live += wh;
+        live_blks++;
+      } else {
+        free += wh;
+      }
+    });
+  }
+
+  while (pool_freelist.global_large) {
+    large_alloc* a = pool_freelist.global_large;
+    while( a != NULL ) {
+      live_blocks++;
+      live_words += Whsize_hd(Hd_hp(a));
+      a = a->next;
+    }
+    a = Caml_state->shared_heap->swept_large;
+    while( a != NULL ) {
+      live_blocks++;
+      live_words += Whsize_hd(Hd_hp(a));
+      a = a->next;
+    }
+    a = Caml_state->shared_heap->unswept_large;
+    while( a != NULL ) {
+      live_blocks++;
+      live_words += Whsize_hd(Hd_hp(a));
+      a = a->next;
+    }
+  }
+
+  *live_words = live;
+  *live_blocks = live_blks;
+  *free_words = free;
+  *largest_free = largest;
+  *fragments = frags;
+  *heap_chunks = chunks;
+}
 
 /* Allocating and deallocating pools from the global freelist. */
 

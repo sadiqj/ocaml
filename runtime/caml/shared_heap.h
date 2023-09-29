@@ -51,6 +51,9 @@ void caml_redarken_pool(struct pool*, scanning_action, void*);
 
 intnat caml_sweep(struct caml_heap_state*, intnat);
 
+void caml_shared_heap_stats(intnat* live_words, intnat* live_blocks,
+                            intnat* free_words, intnat* largest_free,
+                            intnat* fragments, intnat* heap_chunks);
 
 /* must be called during STW */
 void caml_cycle_heap_stw(void);

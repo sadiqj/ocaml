@@ -998,6 +998,8 @@ void caml_major_collection_slice (intnat howmuch)
   caml_allocated_words = 0;
   caml_dependent_allocated = 0;
   caml_extra_heap_resources = 0.0;
+
+  Caml_state->stat_major_collections++;
   if (caml_major_slice_end_hook != NULL) (*caml_major_slice_end_hook) ();
 }
 

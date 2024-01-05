@@ -17,6 +17,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
 #include <assert.h>
 #include "caml/addrmap.h"
 #include "caml/custom.h"
@@ -933,6 +934,9 @@ static void compact_update_ephe_list(volatile value *ephe_p)
   }
 }
 
+atomic_uintnat shared_pool_addr_min;
+atomic_uintnat shared_pool_addr_max;
+
 /* Compact the heap for the given domain. Run in parallel for all domains. */
 
 void caml_compact_heap(caml_domain_state* domain_state,
@@ -1288,6 +1292,58 @@ void caml_compact_heap(caml_domain_state* domain_state,
 
     /* We are done, increment our compaction count */
     atomic_fetch_add(&caml_compactions_count, 1);
+  }
+
+  /* Fifth phase: each domain tracks it's minimum and maximum shared_pool
+     address and then exchanges it with all other domains. The leader then
+     calls madvise(MADV_COLLAPSE) on the range. */
+  if( participants[0] == Caml_state ) {
+    atomic_init(&shared_pool_addr_min, (uintnat)-1);
+    atomic_init(&shared_pool_addr_max, 0);
+  }
+
+  caml_global_barrier();
+
+  uintnat addr_min = (uintnat)-1;
+  uintnat addr_max = 0;
+
+  for (int sz_class = 1; sz_class < NUM_SIZECLASSES; sz_class++) {
+    pool* cur_pool = heap->unswept_avail_pools[sz_class];
+    while (cur_pool) {
+      addr_min = ((uintnat)cur_pool < addr_min) ? (uintnat)cur_pool : addr_min;
+      addr_max = ((uintnat)cur_pool > addr_max) ? (uintnat)cur_pool : addr_max;
+      cur_pool = cur_pool->next;
+    }
+
+    cur_pool = heap->unswept_full_pools[sz_class];
+    while (cur_pool) {
+      addr_min = ((uintnat)cur_pool < addr_min) ? (uintnat)cur_pool : addr_min;
+      addr_max = ((uintnat)cur_pool > addr_max) ? (uintnat)cur_pool : addr_max;
+      cur_pool = cur_pool->next;
+    }
+  }
+
+  if( atomic_load_relaxed(&shared_pool_addr_min) > addr_min ) {
+    /* do atomic CAS */
+    atomic_compare_exchange_strong(&shared_pool_addr_min,
+                                   &addr_min,
+                                   addr_min);
+  }
+
+  if( atomic_load_relaxed(&shared_pool_addr_max) < addr_max ) {
+    /* do atomic CAS */
+    atomic_compare_exchange_strong(&shared_pool_addr_max,
+                                   &addr_max,
+                                   addr_max);
+  }
+
+  caml_global_barrier();
+
+  if( participants[0] == Caml_state ) {
+    addr_min = atomic_load_relaxed(&shared_pool_addr_min);
+    addr_max = atomic_load_relaxed(&shared_pool_addr_max);
+
+    madvise((void*)addr_min, addr_max - addr_min, MADV_COLLAPSE);
   }
 
   caml_gc_log("Compacting heap complete");

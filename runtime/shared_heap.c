@@ -36,6 +36,8 @@
 #include "caml/startup_aux.h"
 #include "caml/weak.h"
 
+#define MADV_COLLAPSE 25
+
 CAMLexport atomic_uintnat caml_compactions_count;
 
 typedef unsigned int sizeclass;

@@ -1306,37 +1306,49 @@ void caml_compact_heap(caml_domain_state* domain_state,
 
   caml_global_barrier();
 
-  uintnat addr_min = (uintnat)-1;
+  uintnat addr_min = UINTNAT_MAX;
   uintnat addr_max = 0;
 
   for (int sz_class = 1; sz_class < NUM_SIZECLASSES; sz_class++) {
     pool* cur_pool = heap->unswept_avail_pools[sz_class];
     while (cur_pool) {
-      addr_min = ((uintnat)cur_pool < addr_min) ? (uintnat)cur_pool : addr_min;
-      addr_max = ((uintnat)cur_pool > addr_max) ? (uintnat)cur_pool : addr_max;
+      uintnat cur_addr = (uintnat)cur_pool;
+      addr_min = (cur_addr < addr_min) ? cur_addr : addr_min;
+      addr_max = (cur_addr > addr_max) ? cur_addr : addr_max;
       cur_pool = cur_pool->next;
     }
 
     cur_pool = heap->unswept_full_pools[sz_class];
     while (cur_pool) {
-      addr_min = ((uintnat)cur_pool < addr_min) ? (uintnat)cur_pool : addr_min;
-      addr_max = ((uintnat)cur_pool > addr_max) ? (uintnat)cur_pool : addr_max;
+      uintnat cur_addr = (uintnat)cur_pool;
+      addr_min = (cur_addr < addr_min) ? cur_addr : addr_min;
+      addr_max = (cur_addr > addr_max) ? cur_addr : addr_max;
       cur_pool = cur_pool->next;
     }
   }
 
   if( atomic_load_relaxed(&shared_pool_addr_min) > addr_min ) {
     /* do atomic CAS */
-    atomic_compare_exchange_strong(&shared_pool_addr_min,
-                                   &addr_min,
-                                   addr_min);
+    uintnat expected = atomic_load_relaxed(&shared_pool_addr_min);
+    while( expected > addr_min ) {
+      if( atomic_compare_exchange_weak(&shared_pool_addr_min,
+                                       &expected,
+                                       addr_min) ) {
+        break;
+      }
+    }
   }
 
   if( atomic_load_relaxed(&shared_pool_addr_max) < addr_max ) {
     /* do atomic CAS */
-    atomic_compare_exchange_strong(&shared_pool_addr_max,
-                                   &addr_max,
-                                   addr_max);
+    uintnat expected = atomic_load_relaxed(&shared_pool_addr_max);
+    while( expected < addr_max ) {
+      if( atomic_compare_exchange_weak(&shared_pool_addr_max,
+                                       &expected,
+                                       addr_max) ) {
+        break;
+      }
+    }
   }
 
   caml_global_barrier();
@@ -1345,7 +1357,11 @@ void caml_compact_heap(caml_domain_state* domain_state,
     addr_min = atomic_load_relaxed(&shared_pool_addr_min);
     addr_max = atomic_load_relaxed(&shared_pool_addr_max);
 
-    madvise((void*)addr_min, addr_max - addr_min, MADV_COLLAPSE);
+    /* add pool size to addr_max */
+    addr_max += Bsize_wsize(POOL_WSIZE);
+
+    /* Note that these are already at page boundaries */
+    madvise((void*)addr_min, (void*)addr_max - (void*)addr_min, MADV_COLLAPSE);
   }
 
   caml_gc_log("Compacting heap complete");

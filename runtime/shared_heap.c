@@ -48,11 +48,16 @@ struct global_heap_state caml_global_heap_state = {
   2 << HEADER_COLOR_SHIFT,
 };
 
+static uintnat current_chunk_seq = 0;
+static uintnat current_chunk_size = 0;
+
 typedef struct pool {
   struct pool* next;
   value* next_obj;
   caml_domain_state* owner;
   sizeclass sz;
+  uintnat chunk_seq;
+  uintnat chunk_seq_size;
 } pool;
 static_assert(sizeof(pool) == Bsize_wsize(POOL_HEADER_WSIZE), "");
 #define POOL_SLAB_WOFFSET(sz) (POOL_HEADER_WSIZE + wastage_sizeclass[sz])
@@ -210,6 +215,8 @@ static pool* pool_acquire(struct caml_heap_state* local) {
       if (mem) {
         pool_freelist.fresh_pools = new_pools;
         pool_freelist.next_fresh_pool = mem;
+        current_chunk_seq++;
+        current_chunk_size = new_pools;
       }
     }
     if (pool_freelist.fresh_pools > 0) {
@@ -218,6 +225,8 @@ static pool* pool_acquire(struct caml_heap_state* local) {
       pool_freelist.fresh_pools --;
       r->next = NULL;
       r->owner = NULL;
+      r->chunk_seq = current_chunk_seq;
+      r->chunk_seq_size = current_chunk_size;
     }
   }
   if (r) {

@@ -975,6 +975,16 @@ static void compact_update_ephe_list(volatile value *ephe_p)
   }
 }
 
+int compact_count_pools(pool* start_pool) {
+  int count = 0;
+  while( start_pool ) {
+    count++;
+    start_pool = start_pool->next;
+  }
+
+  return count;
+}
+
 /* Compact the heap for the given domain. Run in parallel for all domains. */
 
 void caml_compact_heap(caml_domain_state* domain_state,
@@ -1047,8 +1057,7 @@ void caml_compact_heap(caml_domain_state* domain_state,
   pool *evacuated_pools = NULL;
 
   for (int sz_class = 1; sz_class < NUM_SIZECLASSES; sz_class++) {
-    /* We only care about moving things in pools that aren't full (we cannot
-    evacuate to or from a full pool) */
+    /* We start with partial pools */
     pool* cur_pool = heap->unswept_avail_pools[sz_class];
 
     if (!cur_pool) {
@@ -1057,15 +1066,18 @@ void caml_compact_heap(caml_domain_state* domain_state,
     }
 
     /* count the number of pools */
-    int num_pools = 0;
+    int avail_pools =
+      compact_count_pools(heap->unswept_avail_pools[sz_class]);
 
-    while (cur_pool) {
-      num_pools++;
-      cur_pool = cur_pool->next;
-    }
+    int full_pools =
+      compact_count_pools(heap->unswept_full_pools[sz_class]);
 
+    int pool_blocks = POOL_BLOCKS(heap->unswept_avail_pools[sz_class]);
+
+    /* We only need to calculate stats for partial_pools, we know exactly
+       how many live/free blocks we have in full pools */
     struct compact_pool_stat* pool_stats = caml_stat_alloc_noexc(
-      sizeof(struct compact_pool_stat) * num_pools);
+      sizeof(struct compact_pool_stat) * avail_pools);
 
     /* if we're unable to allocate pool_stats here then we should avoid
       evacuating this size class. It's unlikely but it may be that we had
@@ -1090,7 +1102,10 @@ void caml_compact_heap(caml_domain_state* domain_state,
        pass.
     */
     int k = 0;
-    int total_live_blocks = 0;
+
+    /* We count the live blocks we have in the full pools */
+    int total_live_blocks = full_pools * pool_blocks;
+
 #ifdef DEBUG
     int total_free_blocks = 0;
 #endif

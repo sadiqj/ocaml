@@ -1190,7 +1190,20 @@ void caml_compact_heap(caml_domain_state* domain_state,
     /* Now we compute the index of the first pool we are evacuating, we can do
     this because we know the total_live_blocks and block size. */
 
-    int evac_idx = (total_live_blocks / pool_blocks) + 2;
+    int evac_idx;
+    int totally_full;
+
+    if( total_live_blocks % pool_blocks == 0 ) {
+      /* We have exactly enough live_blocks to completely fill
+         total_live_blocks / pool_blocks pools */
+      evac_idx = total_live_blocks / pool_blocks + 1;
+      totally_full = 1;
+    } else {
+      /* We have a partially filled live_block at the end, so evacuation
+         starts after it */
+      evac_idx = total_live_blocks / pool_blocks + 2;
+      totally_full = 0;
+    }
 
     /* We checked earlier we had at least one pool we could evacuate */
     CAMLassert( evac_idx < total_pools );
@@ -1206,14 +1219,26 @@ void caml_compact_heap(caml_domain_state* domain_state,
       evacuated_pools = t;
     }
 
-    /* While we're here, let's fix up the pool next pointers for the alloc
-    pools */
+    /* we need to fix up the full_pools and avail_pools for this pool size.
+       If totally_full is 1 we put them all on the full pools list, if
+       totally_full is 0 we need to put the last one on avail_pools */
+
     for(i = 0; i < evac_idx-1 ; i++) {
       CAMLassert(sz_pools[i+1] != NULL);
       sz_pools[i]->next = sz_pools[i+1];
     }
 
     sz_pools[evac_idx-1]->next = NULL;
+
+    if( totally_full ) {
+      heap->unswept_full_pools[sz_class] = sz_pools[0];
+      heap->unswept_avail_pools[sz_class] = NULL;
+    } else {
+      heap->unswept_full_pools[sz_class] = sz_pools[0];
+      /* TODO: Check that evac_idx-2 is > 0 */
+      sz_pools[evac_idx-2]->next = NULL;
+      heap->unswept_avail_pools[sz_class] = sz_pools[evac_idx-1];
+    }
 
     /* We're done with the pool stats. TODO: We can remove pool_stats
       entirely */
@@ -1362,6 +1387,7 @@ void caml_compact_heap(caml_domain_state* domain_state,
     }
     #endif
 
+    printf("Freeing pool %p\n", cur_pool);
     pool_free(heap, cur_pool, cur_pool->sz);
     cur_pool = next_pool;
     freed_pools++;

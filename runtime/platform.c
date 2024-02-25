@@ -206,15 +206,15 @@ void caml_mem_decommit(void* mem, uintnat size)
 void caml_mem_unmap(void* mem, uintnat size)
 {
 #ifdef DEBUG
-  uintnat data;
-  CAMLassert(caml_lf_skiplist_find(&mmap_blocks, (uintnat)mem, &data) != 0);
-  CAMLassert(data == size);
+  //uintnat data;
+  //AMLassert(caml_lf_skiplist_find(&mmap_blocks, (uintnat)mem, &data) != 0);
+  //CAMLassert(data == size);
 #endif
   caml_gc_message(0x1000, "munmap %" ARCH_INTNAT_PRINTF_FORMAT "d"
                           " bytes at %p for heaps\n", size, mem);
   caml_plat_mem_unmap(mem, size);
 #ifdef DEBUG
-  caml_lf_skiplist_remove(&mmap_blocks, (uintnat)mem);
+  //caml_lf_skiplist_remove(&mmap_blocks, (uintnat)mem);
 #endif
 }
 

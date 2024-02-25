@@ -898,12 +898,12 @@ static void compact_debug_check_pools(struct caml_heap_state* heap) {
     while (p) {
       CAMLassert(p->next_obj == NULL);
       /* go through each block and check the size is sz */
-      header_t* block = POOL_FIRST_BLOCK(p, p->sz);
+      header_t* block = POOL_FIRST_BLOCK(p, sz);
       header_t* end = POOL_END(p);
 
       while (block < end) {
-        CAMLassert(Whsize_hd(*block) == wsize_sizeclass[p->sz]);
-        block += wsize_sizeclass[p->sz];
+        CAMLassert(Whsize_hd(*block) == wsize_sizeclass[sz]);
+        block += wsize_sizeclass[sz];
       }
 
       p = p->next;
@@ -917,12 +917,18 @@ static void compact_debug_check_pools(struct caml_heap_state* heap) {
     while (p) {
       CAMLassert(p->next_obj != NULL);
       /* go through each block and check the size is sz */
-      header_t* block = POOL_FIRST_BLOCK(p, p->sz);
+      header_t* block = POOL_FIRST_BLOCK(p, sz);
       header_t* end = POOL_END(p);
 
       while (block < end) {
-        CAMLassert(Whsize_hd(*block) == wsize_sizeclass[p->sz]);
-        block += wsize_sizeclass[p->sz];
+        if( *block != 0 ) {
+          if( Whsize_hd(*block) != wsize_sizeclass[sz] ) {
+            printf("block size: %ld, expected: %d\n", Whsize_hd(*block), wsize_sizeclass[sz]);
+            fflush(stdout);
+          }
+          CAMLassert(Whsize_hd(*block) == wsize_sizeclass[sz]);
+        }
+        block += wsize_sizeclass[sz];
       }
 
       p = p->next;
@@ -1063,6 +1069,8 @@ void caml_compact_heap(caml_domain_state* domain_state,
     Edward's Two-Finger algorithm from the original 1974 LISP book (The
     Programming Language LISP). At a high level the algorithm works as a series
     of parallel (using all running domains) phases separated by global barriers:
+
+    TODO: Fix up this comment
 
     1. For each size class
       a. Compute the number of live blocks in partially filled pools
@@ -1242,71 +1250,13 @@ void caml_compact_heap(caml_domain_state* domain_state,
     /* Now sort sz_pools so that the largest chunks are first */
     qsort(sz_pools, total_pools, sizeof(pool*), compact_compare_pools);
 
-    /* Now we compute the index of the first pool we are evacuating, we can do
-    this because we know the total_live_blocks and block size. */
-
-    int evac_idx = evac_idx = total_live_blocks / pool_blocks + 1;
-    int totally_full;
-
-    if( total_live_blocks % pool_blocks == 0 ) {
-      totally_full = 1;
-    } else {
-      totally_full = 0;
-    }
-
-    /* We checked earlier we had at least one pool we could evacuate */
-    CAMLassert( evac_idx < total_pools );
-
-    /* Add all the pools at the evacuated index or beyond to the
-      evacuated_pools list (note: it's not safe to call pool->next after this
-      point) */
-    for(i = evac_idx; i < total_pools ; i++) {
-      pool* t = sz_pools[evac_idx];
-      if( evacuated_pools ) {
-        evacuated_pools->next = t;
-      }
-      evacuated_pools = t;
-    }
-
-    /* we need to fix up the full_pools and avail_pools for this pool size.
-       If totally_full is 1 we put them all on the full pools list, if
-       totally_full is 0 we need to put the last (or only!) one on avail_pools
-    */
-
-    for(i = 0; i < evac_idx-1 ; i++) {
-      CAMLassert(sz_pools[i+1] != NULL);
-      sz_pools[i]->next = sz_pools[i+1];
-    }
-
-    sz_pools[evac_idx-1]->next = NULL;
-
-    if( totally_full ) {
-      heap->unswept_full_pools[sz_class] = sz_pools[0];
-      heap->unswept_avail_pools[sz_class] = NULL;
-    } else {
-      int pools_remaining = total_pools - evac_idx;
-      if( pools_remaining > 1 ) {
-        /* Put all but one on the full pools list */
-        heap->unswept_full_pools[sz_class] = sz_pools[0];
-        sz_pools[evac_idx-2]->next = NULL;
-        heap->unswept_avail_pools[sz_class] = sz_pools[evac_idx-1];
-      } else {
-        /* Put the only remaining pool in the avail pools list */
-        heap->unswept_avail_pools[sz_class] = sz_pools[0];
-      }
-    }
-
-    /* We're done with the pool stats. TODO: We can remove pool_stats
-      entirely */
-    caml_stat_free(pool_stats);
-
-    /* Evacuate marked blocks from the evacuating pools into the
-       avail pools. */
-    i = evac_idx;
+    /* We start with two indexes, one at the end of the pools and one at the
+       start. We then walk inwards until we cross. */
+    int evac_idx = total_pools - 1;
     int alloc_idx = 0;
 
-    while(i < total_pools) {
-      cur_pool = sz_pools[i];
+    while(1) {
+      cur_pool = sz_pools[evac_idx];
 
       header_t* p = POOL_FIRST_BLOCK(cur_pool, sz_class);
       header_t* end = POOL_END(cur_pool);
@@ -1329,7 +1279,10 @@ void caml_compact_heap(caml_domain_state* domain_state,
 
             while(to_pool->next_obj == NULL) {
               alloc_idx++;
-              CAMLassert(alloc_idx < evac_idx);
+              if( alloc_idx == evac_idx ) {
+                /* We've crossed the streams */
+                goto done;
+              }
               to_pool = sz_pools[alloc_idx];
             }
 
@@ -1371,48 +1324,37 @@ void caml_compact_heap(caml_domain_state* domain_state,
         p += wh;
       }
 
-      i++;
-    }
+      evac_idx--;
 
-    if( alloc_idx != evac_idx-1 ) {
-      printf("sz: %d, alloc_idx: %d, evac_idx: %d, total_live_blocks: %d, pool_size: %d\n", sz_class, alloc_idx, evac_idx, total_live_blocks, pool_blocks);
-
-      int tmp_free = 0, tmp_live = 0, tmp_garb = 0;
-
-      for( int k = 0; k < total_pools; k++ ) {
-        /* iterate pool and count free / live blocks */
-        int free_blocks = 0, live_blocks = 0, moved_blocks = 0;
-        header_t* p = POOL_FIRST_BLOCK(sz_pools[k], sz_class);
-        header_t* end = POOL_END(sz_pools[k]);
-        mlsize_t wh = wsize_sizeclass[sz_class];
-
-        while (p + wh <= end) {
-          header_t h = (header_t)atomic_load_relaxed((atomic_uintnat*)p);
-
-          if( h == 0 ) {
-             free_blocks++;
-          } else if( Has_status_hd(h, caml_global_heap_state.UNMARKED) ) {
-            live_blocks++;
-          } else if( Has_status_hd(h, caml_global_heap_state.MARKED) ) {
-            moved_blocks++;
-          }
-
-          p += wh;
-        }
-
-        tmp_free += free_blocks;
-        tmp_live += live_blocks;
-        tmp_garb += moved_blocks;
-
-        printf("pool: %d, chunk: %ld, size: %ld, live_blocks: %d, free_blocks: %d, moved_blocks: %d, next_obj: %p\n", k, sz_pools[k]->chunk, sz_pools[k]->chunk_size, live_blocks, free_blocks, moved_blocks, sz_pools[k]->next_obj);
+      if( evac_idx <= alloc_idx ) {
+        break;
       }
-
-      printf("total_live_blocks: %d, tmp_free: %d, tmp_live: %d, tmp_moved: %d\n", total_live_blocks, tmp_free, tmp_live, tmp_garb);
-
-      fflush(stdout);
     }
-    /* If we did everything correctly then we should be on the last alloc pool*/
-    CAMLassert(alloc_idx == evac_idx-1);
+
+    done:
+    /* We are now evacuating and allocating the same pool, we're done */
+    CAMLassert(alloc_idx == evac_idx );
+
+    /* now we need to fix up the unswept_full_pools and unswept_avail_pools */
+    pool* new_full_pools = NULL;
+    pool* new_avail_pools = NULL;
+
+    for( int i = 0; i <= evac_idx; i++ ) {
+      pool* p = sz_pools[i];
+
+      if( p->next_obj == NULL ) {
+        /* This pool is now full */
+        p->next = new_full_pools;
+        new_full_pools = p;
+      } else {
+        /* This pool is now partially full */
+        p->next = new_avail_pools;
+        new_avail_pools = p;
+      }
+    }
+
+    heap->unswept_full_pools[sz_class] = new_full_pools;
+    heap->unswept_avail_pools[sz_class] = new_avail_pools;
 
     caml_stat_free(sz_pools);
   }

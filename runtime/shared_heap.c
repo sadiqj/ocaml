@@ -53,11 +53,12 @@ typedef struct pool {
   value* next_obj;
   caml_domain_state* owner;
   sizeclass sz;
+  int wsize;
 } pool;
 static_assert(sizeof(pool) == Bsize_wsize(POOL_HEADER_WSIZE), "");
 #define POOL_SLAB_WOFFSET(sz) (POOL_HEADER_WSIZE + wastage_sizeclass[sz])
 #define POOL_FIRST_BLOCK(p, sz) ((header_t*)(p) + POOL_SLAB_WOFFSET(sz))
-#define POOL_END(p) ((header_t*)(p) + POOL_WSIZE)
+#define POOL_END(p) ((header_t*)(p) + p->wsize)
 #define POOL_BLOCKS(p) ((POOL_WSIZE - POOL_HEADER_WSIZE) / \
                         wsize_sizeclass[(p)->sz])
 
@@ -180,17 +181,18 @@ void caml_teardown_shared_heap(struct caml_heap_state* heap) {
 
 /* Allocating and deallocating pools from the global freelist. */
 
-static pool* pool_acquire(struct caml_heap_state* local) {
+static pool* pool_acquire(struct caml_heap_state* local, int wsize) {
   pool* r;
 
   caml_plat_lock_blocking(&pool_freelist.lock);
   if (!pool_freelist.free) {
-    void* mem = caml_mem_map(Bsize_wsize(POOL_WSIZE), 0);
+    void* mem = caml_mem_map(Bsize_wsize(wsize), 0);
 
     if (mem) {
       CAMLassert(pool_freelist.free == NULL);
 
       r = (pool*)mem;
+      r->wsize = wsize;
       r->next = pool_freelist.free;
       r->owner = NULL;
       pool_freelist.free = r;
@@ -212,7 +214,7 @@ static void pool_release(struct caml_heap_state* local,
 {
   pool->owner = NULL;
   CAMLassert(pool->sz == sz);
-  local->stats.pool_words -= POOL_WSIZE;
+  local->stats.pool_words -= pool->wsize;
   local->stats.pool_frag_words -= POOL_HEADER_WSIZE + wastage_sizeclass[sz];
   caml_plat_lock_blocking(&pool_freelist.lock);
   pool->next = pool_freelist.free;
@@ -226,9 +228,9 @@ static void pool_free(struct caml_heap_state* local,
                          sizeclass sz)
 {
     CAMLassert(pool->sz == sz);
-    local->stats.pool_words -= POOL_WSIZE;
+    local->stats.pool_words -= pool->wsize;
     local->stats.pool_frag_words -= POOL_HEADER_WSIZE + wastage_sizeclass[sz];
-    caml_mem_unmap(pool, Bsize_wsize(POOL_WSIZE));
+    caml_mem_unmap(pool, Bsize_wsize(pool->wsize));
 }
 
 static void calc_pool_stats(pool* a, sizeclass sz, struct heap_stats* s)
@@ -249,7 +251,7 @@ static void calc_pool_stats(pool* a, sizeclass sz, struct heap_stats* s)
     p += wh;
   }
   CAMLassert(end == p);
-  s->pool_words += POOL_WSIZE;
+  s->pool_words += a->wsize;
 }
 
 /* Initialize a pool and its object freelist */
@@ -375,11 +377,18 @@ static pool* pool_find(struct caml_heap_state* local, sizeclass sz) {
   r = pool_global_adopt(local, sz);
   if (r) return r;
 
-  /* Failing that, we need to allocate a new pool */
-  r = pool_acquire(local);
+  /* Failing that, we need to allocate a new pool. Test if we've
+     already got any for our sizes */
+  int alloc_small_pool = 0;
+
+  alloc_small_pool |= (local->full_pools[sz] == NULL || local->full_pools[sz]->next == NULL);
+
+  int wsize = (alloc_small_pool) ? POOL_SMALL_WSIZE : POOL_LARGE_WSIZE;
+
+  r = pool_acquire(local, wsize);
   if (!r) return 0; /* if we can't allocate, give up */
 
-  local->stats.pool_words += POOL_WSIZE;
+  local->stats.pool_words += r->wsize;
   if (local->stats.pool_words > local->stats.pool_max_words)
     local->stats.pool_max_words = local->stats.pool_words;
   local->stats.pool_frag_words += POOL_HEADER_WSIZE + wastage_sizeclass[sz];
@@ -1288,7 +1297,7 @@ void caml_compact_heap(caml_domain_state* domain_state,
     while( cur_pool ) {
       next_pool = cur_pool->next;
       /* No stats to update so just unmap */
-      caml_mem_unmap(cur_pool, Bsize_wsize(POOL_WSIZE));
+      caml_mem_unmap(cur_pool, Bsize_wsize(cur_pool->wsize));
       cur_pool = next_pool;
     }
 
@@ -1344,7 +1353,7 @@ static void verify_pool(pool* a, sizeclass sz, struct mem_stats* s) {
       p += wh;
     }
     CAMLassert(end == p);
-    s->alloced += POOL_WSIZE;
+    s->alloced += a->wsize;
   }
 }
 

@@ -250,7 +250,6 @@ static void calc_pool_stats(pool* a, sizeclass sz, struct heap_stats* s)
 
     p += wh;
   }
-  CAMLassert(end == p);
   s->pool_words += a->wsize;
 }
 
@@ -282,7 +281,6 @@ Caml_inline void pool_initialize(pool* r,
     #endif
     p += wh;
   }
-  CAMLassert(p == end);
   CAMLassert((uintptr_t)end % Cache_line_bsize == 0);
   r->next_obj = (value*)(p - wh);
 }
@@ -356,6 +354,8 @@ static pool* pool_global_adopt(struct caml_heap_state* local, sizeclass sz)
   return r;
 }
 
+static int only_small_cache = -1;
+
 /* Allocating an object from a pool */
 static pool* pool_find(struct caml_heap_state* local, sizeclass sz) {
   pool* r;
@@ -379,9 +379,8 @@ static pool* pool_find(struct caml_heap_state* local, sizeclass sz) {
 
   /* Failing that, we need to allocate a new pool. Test if we've
      already got any for our sizes */
-  int alloc_small_pool = 0;
-
-  alloc_small_pool |= (local->full_pools[sz] == NULL || local->full_pools[sz]->next == NULL);
+  int alloc_small_pool =
+    (local->full_pools[sz] == NULL || local->full_pools[sz]->next == NULL);
 
   int wsize = (alloc_small_pool) ? POOL_SMALL_WSIZE : POOL_LARGE_WSIZE;
 

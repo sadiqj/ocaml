@@ -524,21 +524,28 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
         }
         /* add to freelist */
         atomic_store_relaxed((atomic_uintnat*)p, POOL_FREE_HEADER(0));
-        p[1] = (value)a->next_obj;
+
         CAMLassert(Is_block((value)p));
         if( last_p ) {
           CAMLassert(POOL_BLOCK_FREE_HP(last_p));
           /* update the wosize of the last free block to include the current block */
           *last_p = POOL_FREE_HEADER(Wosize_hp(last_p) + 1);
+
+          /* point to the next free block */
+          p[1] = last_p[1];
+
           /* check that last_p to p is the same as Wosize_hp(last_p) */
           CAMLassert(((p - last_p) / wh) == Wosize_hp(last_p));
+        } else {
+          /* this is the first free block */
+          p[1] = (value)a->next_obj;
+          a->next_obj = (value*)p;
         }
 #ifdef DEBUG
         for (mlsize_t i = 1, wo = Wosize_whsize(wh); i < wo; i++) {
           Field(Val_hp(p), i) = Debug_free_major;
         }
 #endif
-        a->next_obj = (value*)p;
         all_used = 0;
         /* update stats */
         s->pool_live_blocks--;

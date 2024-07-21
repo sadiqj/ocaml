@@ -411,6 +411,8 @@ static void* pool_allocate(struct caml_heap_state* local, sizeclass sz) {
     next = (value*)(p + wsize_sizeclass[sz]);
     /* we update the pool header of the next block */
     *next = POOL_FREE_HEADER(Wosize_hp(p) - 1);
+    /* also copy the next_obj pointer from p */
+    next[1] = p[1];
   } else {
     next = (value*)p[1];  
   }

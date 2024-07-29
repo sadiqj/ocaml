@@ -506,16 +506,45 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
     int all_used = 1;
     struct heap_stats* s = &local->stats;
 
+    a->next_obj = 0;
+
     /* conceptually, this is incremented by [wh] for every iteration
        below, however we can hoist these increments knowing that [p ==
        end] on exit from the loop (as asserted) */
     work = end - p;
     do {
       header_t hd = (header_t)atomic_load_relaxed((atomic_uintnat*)p);
+
       if (POOL_BLOCK_FREE_HD(hd)) {
         /* already on freelist */
         all_used = 0;
-        last_p = p;
+        
+        /* if there was a free block before us, check first if we can
+           merge with it */
+        if( last_p ) {
+          CAMLassert(POOL_BLOCK_FREE_HP(last_p));
+
+          /* check if we can merge with the last free block */
+          if( last_p + Wosize_hp(last_p) == p ) {
+            /* if we can then update the wosize of the last free block */
+            *last_p = POOL_FREE_HEADER(Wosize_hp(last_p) + Wosize_hd(hd));
+          } else {
+            /* in this case there's a non-free block between us so update
+                the next pointer if necessary */
+            if( last_p[1] != (value)p ) {
+              last_p[1] = (value)p;
+            }
+
+            last_p = p;
+          }
+
+        } else {
+          /* if we're the first free block then set the next_obj pointer */
+          a->next_obj = (value*)p;
+
+          last_p = p;
+        }
+
         /* skip to end of free blocks */
         p += Wosize_hd(hd) * wh;
       } else if (Has_status_hd(hd, caml_global_heap_state.GARBAGE)) {
@@ -532,9 +561,6 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
           CAMLassert(POOL_BLOCK_FREE_HP(last_p));
           /* update the wosize of the last free block to include the current block */
           *last_p = POOL_FREE_HEADER(Wosize_hp(last_p) + 1);
-
-          /* point to the next free block */
-          p[1] = last_p[1];
 
           /* check that last_p to p is the same as Wosize_hp(last_p) */
           CAMLassert(((p - last_p) / wh) == Wosize_hp(last_p));

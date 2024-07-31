@@ -42,7 +42,7 @@ endif
 COMPFLAGS = -strict-sequence -absname -w +a-4-9-41-42-44-45-48 \
             -g -warn-error +A -bin-annot -nostdlib -principal
 ifeq "$(FLAMBDA)" "true"
-OPTCOMPFLAGS += -O3
+OPTCOMPFLAGS += -O0
 endif
 OPTCOMPILER=$(ROOTDIR)/ocamlopt$(EXE)
 CAMLOPT=$(OCAMLRUN) $(OPTCOMPILER)

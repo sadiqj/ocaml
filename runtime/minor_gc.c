@@ -403,13 +403,17 @@ again:
     st->todo_list = Field (new_v, 1);    /* Remove from list. */
 
     f = Field(new_v, 0);
+    #ifdef DEBUG
     CAMLassert (!Is_debug_tag(f));
+    #endif
     if (Is_block (f) && Is_young(f)) {
       oldify_one (st, f, Op_val (new_v));
     }
     for (mlsize_t i = 1; i < Wosize_val (new_v); i++){
       f = Field(v, i);
+      #ifdef DEBUG
       CAMLassert (!Is_debug_tag(f));
+      #endif
       if (Is_block (f) && Is_young(f)) {
         oldify_one (st, f, Op_val (new_v) + i);
       } else {

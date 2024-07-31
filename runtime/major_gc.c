@@ -252,7 +252,9 @@ Caml_inline void pb_fill_mode(prefetch_buffer_t *pb)
 Caml_inline void pb_push(prefetch_buffer_t* pb, value v)
 {
   CAMLassert(Is_block(v) && !Is_young(v));
+  #ifdef DEBUG
   CAMLassert(v != Debug_free_major);
+  #endif
   CAMLassert(pb->enqueued < pb->dequeued + PREFETCH_BUFFER_SIZE);
 
   pb->buffer[pb->enqueued & PREFETCH_BUFFER_MASK] = v;

@@ -1054,7 +1054,7 @@ otherlibs/dynlink/dynlink.cma: VPATH += otherlibs/dynlink/byte
 otherlibs/dynlink/dynlink.cmxa: VPATH += otherlibs/dynlink/native
 
 ifeq "$(FLAMBDA)" "true"
-otherlibs/dynlink/%: OC_NATIVE_COMPFLAGS += -O3
+otherlibs/dynlink/%: OC_NATIVE_COMPFLAGS += -O0
 endif
 
 # dynlink.cmx needs to be available in the search path (since

@@ -22,7 +22,6 @@
 
 /* Standard definitions */
 
-#include <assert.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -278,7 +277,7 @@ typedef char char_os;
   (CAMLlikely(x) ? (void) 0 : caml_failed_assert ( #x , __OSFILE__, __LINE__))
 CAMLnoret CAMLextern void caml_failed_assert (char *, char_os *, int);
 #else
-#define CAMLassert(x) assert(x)
+#define CAMLassert(x) ((void) 0)
 #endif
 
 #ifdef __GNUC__

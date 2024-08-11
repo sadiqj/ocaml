@@ -386,9 +386,7 @@ void caml_scan_stack(
   value *low, *high;
 
   while (stack != NULL) {
-    #ifdef DEBUG
     CAMLassert(stack->magic == 42);
-    #endif
 
     high = Stack_high(stack);
     low = stack->sp;
@@ -585,9 +583,7 @@ void caml_free_stack (struct stack_info* stack)
   CAMLnoalloc;
   struct stack_info** cache = Caml_state->stack_cache;
 
-  #ifdef DEBUG
   CAMLassert(stack->magic == 42);
-  #endif
   CAMLassert(cache != NULL);
   if (stack->cache_bucket != -1) {
     stack->exception_ptr =

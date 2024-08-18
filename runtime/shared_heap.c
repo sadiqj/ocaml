@@ -511,8 +511,41 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
     do {
       header_t hd = (header_t)atomic_load_relaxed((atomic_uintnat*)p);
 
+      /* check if the current block is garbage, if it is turn it into a free
+      block */
+      if (Has_status_hd(hd, caml_global_heap_state.GARBAGE)) {
+        CAMLassert(Whsize_hd(hd) <= wh);
+        if (Tag_hd (hd) == Custom_tag) {
+          void (*final_fun)(value) = Custom_ops_val(Val_hp(p))->finalize;
+          if (final_fun != NULL) final_fun(Val_hp(p));
+        }
+        /* add to freelist */
+        atomic_store_relaxed((atomic_uintnat*)p, POOL_FREE_HEADER(0));
+
+        CAMLassert(Is_block((value)p));
+#ifdef DEBUG
+        for (mlsize_t i = 1, wo = Wosize_whsize(wh); i < wo; i++) {
+          Field(Val_hp(p), i) = Debug_free_major;
+        }
+#endif
+
+        all_used = 0;
+        /* update stats */
+        s->pool_live_blocks--;
+        s->pool_live_words -= Whsize_hd(hd);
+        local->owner->swept_words += Whsize_hd(hd);
+        s->pool_frag_words -= (wh - Whsize_hd(hd));
+
+        /* reload hd */
+        hd = (header_t)atomic_load_relaxed((atomic_uintnat*)p);
+      }
+
+      /* if it was garbage (and is now a free block) or the current block is
+      a free block, see if we can merge it with the last free block or if we
+      can't then update the pointer in the last free block to point to this
+      one */
       if (POOL_BLOCK_FREE_HD(hd)) {
-        /* already on freelist */
+        /* already on freelist or newly created free block from some garbage */
         all_used = 0;
 
         /* if there was a free block before us, check first if we can
@@ -543,48 +576,6 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
         /* skip to end of free blocks (minus one, which we add at the tail
            of the loop) */
         p += Wosize_hd(hd) * wh;
-      } else if (Has_status_hd(hd, caml_global_heap_state.GARBAGE)) {
-        CAMLassert(Whsize_hd(hd) <= wh);
-        if (Tag_hd (hd) == Custom_tag) {
-          void (*final_fun)(value) = Custom_ops_val(Val_hp(p))->finalize;
-          if (final_fun != NULL) final_fun(Val_hp(p));
-        }
-        /* add to freelist */
-        atomic_store_relaxed((atomic_uintnat*)p, POOL_FREE_HEADER(0));
-
-        CAMLassert(Is_block((value)p));
-        if( last_free_block && (last_free_block + (1 + Wosize_hp(last_free_block)) * wh == p) ) {
-          CAMLassert(POOL_BLOCK_FREE_HP(last_free_block));
-          /* update the wosize of the last free block to include the current block */
-          *last_free_block = POOL_FREE_HEADER(Wosize_hp(last_free_block) + 1);
-
-          /* check that last_p to p is the same as Wosize_hp(last_p) */
-          CAMLassert(((p - last_free_block) / wh) == Wosize_hp(last_free_block));
-        } else {
-          if( !last_free_block ) {
-            /* first free block */
-            a->next_obj = (value*)p;
-          } else {
-            /* there was a free block before us, update the next pointer */
-            if( last_free_block[1] != (value)p ) {
-              last_free_block[1] = (value)p;
-            }
-          }
-
-          p[1] = 0;
-          last_free_block = p;
-        }
-#ifdef DEBUG
-        for (mlsize_t i = 1, wo = Wosize_whsize(wh); i < wo; i++) {
-          Field(Val_hp(p), i) = Debug_free_major;
-        }
-#endif
-        all_used = 0;
-        /* update stats */
-        s->pool_live_blocks--;
-        s->pool_live_words -= Whsize_hd(hd);
-        local->owner->swept_words += Whsize_hd(hd);
-        s->pool_frag_words -= (wh - Whsize_hd(hd));
       } else {
         /* still live, the pool can't be released to the global freelist */
         release_to_global_pool = 0;

@@ -535,7 +535,7 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
         s->pool_frag_words -= (wh - Whsize_hd(hd));
 
         /* reload hd */
-        hd = (header_t)atomic_load_relaxed((atomic_uintnat*)p);
+        hd = POOL_FREE_HEADER(0);
       }
 
       /* if it was garbage (and is now a free block) or the current block is

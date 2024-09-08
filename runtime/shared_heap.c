@@ -273,14 +273,6 @@ Caml_inline void pool_initialize(pool* r,
   p[0] = POOL_FREE_HEADER(pool_blocks-1);
   p[1] = 0;
 
-  int wh = wsize_sizeclass[sz];
-  p += wh;
-
-  while (p + wh <= end) {
-    *p = POOL_FREE_HEADER(0);
-    p += wh;
-  }
-
   CAMLassert(p == end);
   CAMLassert((uintptr_t)end % Cache_line_bsize == 0);
 }

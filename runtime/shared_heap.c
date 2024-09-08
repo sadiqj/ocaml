@@ -269,7 +269,7 @@ Caml_inline void pool_initialize(pool* r,
   r->next_obj = (value*)p;
   r->sz = sz;
 
-  p[0] = POOL_FREE_HEADER(pool_blocks-2);
+  p[0] = POOL_FREE_HEADER(pool_blocks-1);
   p[1] = 0;
 
   int wh = wsize_sizeclass[sz];

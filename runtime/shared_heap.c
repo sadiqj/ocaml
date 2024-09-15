@@ -247,6 +247,8 @@ static void calc_pool_stats(pool* a, sizeclass sz, struct heap_stats* s)
       s->pool_live_words += Whsize_hd(hd);
       s->pool_frag_words += wh - Whsize_hd(hd);
       s->pool_live_blocks++;
+    } else {
+      p += wh * Wosize_hd(hd); /* skip contiguous free blocks */
     }
 
     p += wh;
@@ -272,7 +274,6 @@ Caml_inline void pool_initialize(pool* r,
   p[0] = POOL_FREE_HEADER(pool_blocks-1);
   p[1] = 0;
 
-  CAMLassert(p == end);
   CAMLassert((uintptr_t)end % Cache_line_bsize == 0);
 }
 
@@ -509,7 +510,7 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
           void (*final_fun)(value) = Custom_ops_val(Val_hp(p))->finalize;
           if (final_fun != NULL) final_fun(Val_hp(p));
         }
-        /* add to freelist */
+        /* add to freelist. TODO: This could be optimised. */
         atomic_store_relaxed((atomic_uintnat*)p, POOL_FREE_HEADER(0));
 
         CAMLassert(Is_block((value)p));
@@ -523,7 +524,7 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
         /* update stats */
         s->pool_live_blocks--;
         s->pool_live_words -= Whsize_hd(hd);
-        local->owner->swept_words += Whsize_hd(hd);
+        local->owner->swept_words += wh;
         s->pool_frag_words -= (wh - Whsize_hd(hd));
 
         /* reload hd */
@@ -565,7 +566,7 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
 
         /* skip to end of free blocks (minus one, which we add at the tail
            of the loop) */
-        p += Wosize_hd(hd) * wh;
+        p += wh * Wosize_hd(hd);
       } else {
         /* still live, the pool can't be released to the global freelist */
         release_to_global_pool = 0;
@@ -1141,7 +1142,7 @@ void caml_compact_heap(caml_domain_state* domain_state,
           total_free_blocks += wosize + 1;
 #endif
           /* skip to the next block */
-          p += wosize * wh;
+          p += wh * wosize;
         } else if (Has_status_hd(h, caml_global_heap_state.UNMARKED)) {
           total_live_blocks++;
           pool_stats[k].live_blocks++;

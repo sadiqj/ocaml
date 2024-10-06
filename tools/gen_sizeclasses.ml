@@ -52,8 +52,8 @@ let rec findi_acc i p = function
 let findi = findi_acc 0
 
 let arena = 4096
-let arena_large = 4096*64
-let header_size = 4
+let arena_large = arena * 64 (* must be a multiple of arena *)
+let header_size = 5
 let max_slot = 128
 let avail_arena = arena - header_size
 let sizes = List.rev (blocksizes avail_arena max_int max_slot)

@@ -60,7 +60,7 @@ static_assert(sizeof(pool) == Bsize_wsize(POOL_HEADER_WSIZE), "");
 #define POOL_SLAB_WOFFSET(sz) (POOL_HEADER_WSIZE + wastage_sizeclass[sz])
 #define POOL_FIRST_BLOCK(p, sz) ((header_t*)(p) + POOL_SLAB_WOFFSET(sz))
 #define POOL_END(p) ((header_t*)(p) + p->wsize)
-#define POOL_BLOCKS(p) ((POOL_WSIZE - POOL_HEADER_WSIZE) / \
+#define POOL_BLOCKS(p) ((p->wsize - POOL_HEADER_WSIZE) / \
                         wsize_sizeclass[(p)->sz])
 
 #define POOL_BLOCK_FREE_HD(hd) (Tag_hd(hd) == No_scan_tag && (Color_hd(hd) == NOT_MARKABLE))
@@ -401,7 +401,7 @@ static void* pool_allocate(struct caml_heap_state* local, sizeclass sz) {
 
   p = r->next_obj;
   /* assert that p is inside the pool */
-  CAMLassert(p >= (value*)r + POOL_HEADER_WSIZE && p < (value*)r + POOL_WSIZE);
+  CAMLassert(p >= (value*)r + POOL_HEADER_WSIZE && p < (value*)r + r->wsize);
   CAMLassert(POOL_BLOCK_FREE_HP(p));
 
   /* in this case there are more free blocks immediately after */

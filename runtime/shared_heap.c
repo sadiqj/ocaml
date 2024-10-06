@@ -354,8 +354,6 @@ static pool* pool_global_adopt(struct caml_heap_state* local, sizeclass sz)
   return r;
 }
 
-static int only_small_cache = -1;
-
 /* Allocating an object from a pool */
 static pool* pool_find(struct caml_heap_state* local, sizeclass sz) {
   pool* r;

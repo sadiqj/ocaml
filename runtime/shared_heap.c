@@ -701,7 +701,7 @@ static void pool_finalise(struct caml_heap_state* local, pool** plist,
 
     while (p + wh <= end) {
       header_t hd = (header_t)atomic_load_relaxed((atomic_uintnat*)p);
-      if (hd != 0) {
+      if (!POOL_BLOCK_FREE_HD(hd)) {
         CAMLassert(Whsize_hd(hd) <= wh);
         if (Tag_hd (hd) == Custom_tag) {
           void (*final_fun)(value) = Custom_ops_val(Val_hp(p))->finalize;

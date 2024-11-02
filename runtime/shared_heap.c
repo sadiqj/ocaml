@@ -481,8 +481,7 @@ value* caml_shared_try_alloc(struct caml_heap_state* local, mlsize_t wosize,
   return p;
 }
 
-/* Sweeping */
-
+/* Sweeping of the major heap shared pools */
 static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
                          sizeclass sz, int release_to_global_pool) {
   intnat work;
@@ -504,6 +503,12 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
     do {
       header_t hd = (header_t)atomic_load_relaxed((atomic_uintnat*)p);
 
+      /* The pools mark a block as being free by setting the tag to No_scan_tag
+        and the color to NOT_MARKABLE. The wosize is used to indicate the
+        number of contiguous free blocks that follow. The first field is a
+        pointer to the next free block beyond the immediately following
+        contiguous free blocks (if any) */
+
       /* check if the current block is garbage, if it is turn it into a free
       block */
       if (Has_status_hd(hd, caml_global_heap_state.GARBAGE)) {
@@ -512,7 +517,9 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
           void (*final_fun)(value) = Custom_ops_val(Val_hp(p))->finalize;
           if (final_fun != NULL) final_fun(Val_hp(p));
         }
-        /* add to freelist. TODO: This could be optimised. */
+        /* add to freelist. This could be optimised, we don't need
+        to write the free header if we're going to merge it with a prior
+        free block but it makes this codepath more complex */
         atomic_store_relaxed((atomic_uintnat*)p, POOL_FREE_HEADER(0));
 
         CAMLassert(Is_block((value)p));

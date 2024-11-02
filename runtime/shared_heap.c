@@ -492,8 +492,8 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
   {
     header_t* p = POOL_FIRST_BLOCK(a, sz);
     header_t* last_free_block = NULL;
-    header_t* end = POOL_END(a);
-    mlsize_t wh = wsize_sizeclass[sz];
+    const header_t* end = POOL_END(a);
+    const mlsize_t wh = wsize_sizeclass[sz];
     int all_used = 1;
     struct heap_stats* s = &local->stats;
 

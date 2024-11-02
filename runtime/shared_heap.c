@@ -499,9 +499,13 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
 
     a->next_obj = 0;
 
+    // Pre-compute the garbage mask
+    const header_t garbage_mask = caml_global_heap_state.GARBAGE;
+
     work = end - p;
     do {
-      header_t hd = (header_t)atomic_load_relaxed((atomic_uintnat*)p);
+      header_t hd = (header_t)*p;
+      caml_prefetch(p + 3*wh); // Prefetch three blocks ahead
 
       /* The pools mark a block as being free by setting the tag to No_scan_tag
         and the color to NOT_MARKABLE. The wosize is used to indicate the
@@ -511,7 +515,7 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
 
       /* check if the current block is garbage, if it is turn it into a free
       block */
-      if (Has_status_hd(hd, caml_global_heap_state.GARBAGE)) {
+      if (Has_status_hd(hd, garbage_mask)) {
         CAMLassert(Whsize_hd(hd) <= wh);
         if (Tag_hd (hd) == Custom_tag) {
           void (*final_fun)(value) = Custom_ops_val(Val_hp(p))->finalize;
@@ -520,7 +524,7 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
         /* add to freelist. This could be optimised, we don't need
         to write the free header if we're going to merge it with a prior
         free block but it makes this codepath more complex */
-        atomic_store_relaxed((atomic_uintnat*)p, POOL_FREE_HEADER(0));
+        *p = POOL_FREE_HEADER(0);
 
         CAMLassert(Is_block((value)p));
 #ifdef DEBUG
@@ -556,7 +560,8 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
           /* check if we can merge with the last free block */
           if( last_free_block + (1 + Wosize_hp(last_free_block)) * wh == p ) {
             /* if we can then update the wosize of the last free block */
-            *last_free_block = POOL_FREE_HEADER(Wosize_hp(last_free_block) + Wosize_hd(hd) + 1);
+            *last_free_block = POOL_FREE_HEADER(Wosize_hp(last_free_block)
+                                                  + Wosize_hd(hd) + 1);
           } else {
             /* in this case there's a non-free block between us so update
                 the next pointer if necessary */

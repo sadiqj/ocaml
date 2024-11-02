@@ -505,7 +505,6 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
     work = end - p;
     do {
       header_t hd = (header_t)*p;
-      caml_prefetch(p + 3*wh); // Prefetch three blocks ahead
 
       /* The pools mark a block as being free by setting the tag to No_scan_tag
         and the color to NOT_MARKABLE. The wosize is used to indicate the

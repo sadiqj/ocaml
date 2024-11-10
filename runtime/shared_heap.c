@@ -481,7 +481,7 @@ value* caml_shared_try_alloc(struct caml_heap_state* local, mlsize_t wosize,
   return p;
 }
 
-#define MAX_POOLS 4
+#define MAX_POOLS 3
 
 /* Sweeping of the major heap shared pools */
 static intnat pool_sweep(struct caml_heap_state* local, pool** plist,

@@ -481,131 +481,128 @@ value* caml_shared_try_alloc(struct caml_heap_state* local, mlsize_t wosize,
   return p;
 }
 
+#define MAX_POOLS 16
+
 /* Sweeping of the major heap shared pools */
 static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
-                         sizeclass sz, int release_to_global_pool) {
-  intnat work;
-  pool* a = *plist;
-  if (!a) return 0;
-  *plist = a->next;
+             sizeclass sz, int should_release_to_global_pool) {
+  intnat work = 0;
+  mlsize_t wh = wsize_sizeclass[sz];
+  struct heap_stats* s = &local->stats;
 
-  {
-    header_t* p = POOL_FIRST_BLOCK(a, sz);
-    header_t* last_free_block = NULL;
-    const header_t* end = POOL_END(a);
-    const mlsize_t wh = wsize_sizeclass[sz];
-    int all_used = 1;
-    struct heap_stats* s = &local->stats;
+  struct pool_sweep_state {
+    pool* a;
+    header_t* p;
+    header_t* last_free_block;
+    header_t* end;
+    int all_used;
+    int finished;
+    int release_to_global_pool;
+  } state[MAX_POOLS];
 
-    a->next_obj = 0;
+  int num_pools = 0;
+  for (; num_pools < MAX_POOLS && *plist != NULL; num_pools++) {
+    pool* a = *plist;
+    *plist = a->next;
 
-    // Pre-compute the garbage mask
-    const header_t garbage_mask = caml_global_heap_state.GARBAGE;
+    state[num_pools].a = a;
+    state[num_pools].p = POOL_FIRST_BLOCK(a, sz);
+    state[num_pools].last_free_block = NULL;
+    state[num_pools].end = POOL_END(a);
+    state[num_pools].all_used = 1;
+    state[num_pools].finished = 0;
+    state[num_pools].release_to_global_pool = should_release_to_global_pool;
 
-    work = end - p;
-    do {
-      header_t hd = (header_t)*p;
+    a->next_obj = NULL;
 
-      /* The pools mark a block as being free by setting the tag to No_scan_tag
-        and the color to NOT_MARKABLE. The wosize is used to indicate the
-        number of contiguous free blocks that follow. The first field is a
-        pointer to the next free block beyond the immediately following
-        contiguous free blocks (if any) */
+    work += state[num_pools].end - state[num_pools].p;
+  }
 
-      /* check if the current block is garbage, if it is turn it into a free
-      block */
-      if (Has_status_hd(hd, garbage_mask)) {
-        CAMLassert(Whsize_hd(hd) <= wh);
-        if (Tag_hd (hd) == Custom_tag) {
-          void (*final_fun)(value) = Custom_ops_val(Val_hp(p))->finalize;
-          if (final_fun != NULL) final_fun(Val_hp(p));
-        }
-        /* add to freelist. This could be optimised, we don't need
-        to write the free header if we're going to merge it with a prior
-        free block but it makes this codepath more complex */
-        *p = POOL_FREE_HEADER(0);
+  if (num_pools == 0) return 0;
 
-        CAMLassert(Is_block((value)p));
-#ifdef DEBUG
-        for (mlsize_t i = 1, wo = Wosize_whsize(wh); i < wo; i++) {
-          Field(Val_hp(p), i) = Debug_free_major;
-        }
-#endif
+  const header_t garbage_mask = caml_global_heap_state.GARBAGE;
+  int pools_remaining = num_pools;
 
-        all_used = 0;
-        /* update stats */
-        s->pool_live_blocks--;
-        s->pool_live_words -= Whsize_hd(hd);
-        local->owner->swept_words += wh;
-        s->pool_frag_words -= (wh - Whsize_hd(hd));
+  while (pools_remaining > 0) {
+    for (int i = 0; i < num_pools; i++) {
+      struct pool_sweep_state* st = &state[i];
+      if (st->finished) continue;
 
-        /* reload hd */
-        hd = POOL_FREE_HEADER(0);
-      }
+      if (st->p < st->end) {
+        header_t* p = st->p;
+        header_t hd = (header_t)*p;
 
-      /* if it was garbage (and is now a free block) or the current block is
-      a free block, see if we can merge it with the last free block or if we
-      can't then update the pointer in the last free block to point to this
-      one */
-      if (POOL_BLOCK_FREE_HD(hd)) {
-        /* already on freelist or newly created free block from some garbage */
-        all_used = 0;
-
-        /* if there was a free block before us, check first if we can
-           merge with it */
-        if( last_free_block ) {
-          CAMLassert(POOL_BLOCK_FREE_HP(last_free_block));
-
-          /* check if we can merge with the last free block */
-          if( last_free_block + (1 + Wosize_hp(last_free_block)) * wh == p ) {
-            /* if we can then update the wosize of the last free block */
-            *last_free_block = POOL_FREE_HEADER(Wosize_hp(last_free_block)
-                                                  + Wosize_hd(hd) + 1);
-          } else {
-            /* in this case there's a non-free block between us so update
-                the next pointer if necessary */
-            if( last_free_block[1] != (value)p ) {
-              last_free_block[1] = (value)p;
-            }
-
-            last_free_block = p;
+        if (Has_status_hd(hd, garbage_mask)) {
+          CAMLassert(Whsize_hd(hd) <= wh);
+          if (Tag_hd(hd) == Custom_tag) {
+            void (*final_fun)(value) = Custom_ops_val(Val_hp(p))->finalize;
+            if (final_fun != NULL) final_fun(Val_hp(p));
           }
-        } else {
-          /* if we're the first free block then set the next_obj pointer */
-          a->next_obj = (value*)p;
+          *p = POOL_FREE_HEADER(0);
 
-          last_free_block = p;
+          CAMLassert(Is_block((value)p));
+    #ifdef DEBUG
+          for (mlsize_t i = 1, wo = Wosize_whsize(wh); i < wo; i++) {
+          Field(Val_hp(p), i) = Debug_free_major;
+          }
+    #endif
+
+          st->all_used = 0;
+          s->pool_live_blocks--;
+          s->pool_live_words -= Whsize_hd(hd);
+          local->owner->swept_words += wh;
+          s->pool_frag_words -= (wh - Whsize_hd(hd));
+
+          hd = POOL_FREE_HEADER(0);
         }
 
-        /* skip to end of free blocks (minus one, which we add at the tail
-           of the loop) */
-        p += wh * Wosize_hd(hd);
-      } else {
-        /* still live, the pool can't be released to the global freelist */
-        release_to_global_pool = 0;
+        if (POOL_BLOCK_FREE_HD(hd)) {
+          st->all_used = 0;
+
+          if (st->last_free_block) {
+            CAMLassert(POOL_BLOCK_FREE_HP(st->last_free_block));
+            if (st->last_free_block + (1 + Wosize_hp(st->last_free_block)) * wh == p) {
+              *st->last_free_block = POOL_FREE_HEADER(
+              Wosize_hp(st->last_free_block) + Wosize_hd(hd) + 1);
+            } else {
+              if (st->last_free_block[1] != (value)p) {
+                st->last_free_block[1] = (value)p;
+              }
+                st->last_free_block = p;
+            }
+            } else {
+            st->a->next_obj = (value*)p;
+            st->last_free_block = p;
+          }
+
+          st->p += wh * Wosize_hd(hd);
+        } else {
+          st->release_to_global_pool = 0;
+        }
+        st->p += wh;
       }
-      p += wh;
-    } while (p + wh <= end);
-    CAMLassert(p == end);
 
-    if( !all_used ) {
-      /* the last free block should have 0 as it's next pointer */
-      last_free_block[1] = 0;
-    }
+      if (st->p >= st->end) {
+        if (!st->all_used && st->last_free_block) {
+          st->last_free_block[1] = 0;
+        }
 
-    CAMLassert(
-      /* if all spaces are used then next_obj should be 0 */
-      (all_used && !a->next_obj)
-      /* otherwise it should point to a free block */
-      || (!all_used && POOL_BLOCK_FREE_HP(a->next_obj))
-    );
+        CAMLassert(
+          (st->all_used && !st->a->next_obj) ||
+          (!st->all_used && POOL_BLOCK_FREE_HP(st->a->next_obj))
+        );
 
-    if (release_to_global_pool) {
-      pool_release(local, a, sz);
-    } else {
-      pool** list = all_used ? &local->full_pools[sz] : &local->avail_pools[sz];
-      a->next = *list;
-      *list = a;
+        if (st->release_to_global_pool) {
+          pool_release(local, st->a, sz);
+        } else {
+          pool** list = st->all_used ? &local->full_pools[sz] : &local->avail_pools[sz];
+          st->a->next = *list;
+          *list = st->a;
+        }
+
+        st->finished = 1;
+        pools_remaining--;
+      }
     }
   }
 

@@ -14,6 +14,9 @@ Working version
 
 ### Runtime system:
 
+- #13616: Change free list representation in shared heap
+  (Sadiq Jaffer, review by ?)
+
 - #13352: Concurrency refactors and cleanups.
   (Antonin Décimo, review by Gabriel Scherer, David Allsopp, and Miod Vallat)
 

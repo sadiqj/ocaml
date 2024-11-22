@@ -506,10 +506,6 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
     do {
       header_t hd = (header_t)*p;
 
-      if( (char*)p + caml_plat_pagesize < (char*)end ) {
-        caml_prefetch((char*)p + caml_plat_pagesize);
-      }
-
       /* The pools mark a block as being free by setting the tag to No_scan_tag
         and the color to NOT_MARKABLE. The wosize is used to indicate the
         number of contiguous free blocks that follow. The first field is a

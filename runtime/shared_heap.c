@@ -1573,7 +1573,9 @@ static void verify_pool(pool* a, sizeclass sz, struct mem_stats* s) {
         s->overhead += wh - Whsize_hd(hd);
         s->live_blocks++;
       } else {
-        s->free += wh * (Wosize_hd(hd)+1);
+        /* count the free block and any that follow it (stored in the
+           size bits in the header)*/
+        s->free += wh * (1 + Wosize_hd(hd));
         p += Wosize_hd(hd) * wh;
       }
       p += wh;

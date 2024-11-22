@@ -784,6 +784,8 @@ static void pool_finalise(struct caml_heap_state* local, pool** plist,
         }
         atomic_store_relaxed((atomic_uintnat*)p, 0);
         p[1] = (value)0;
+      } else {
+        p += wh * Wosize_hd(hd);
       }
       p += wh;
     }

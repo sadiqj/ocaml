@@ -1110,9 +1110,13 @@ static void compact_update_pools(pool *cur_pool)
     mlsize_t wh = wsize_sizeclass[cur_pool->sz];
 
     while (p + wh <= end) {
-      if (*p &&
-          Has_status_val(Val_hp(p), caml_global_heap_state.UNMARKED)) {
-        compact_update_block(p);
+      if (!POOL_BLOCK_FREE_HP(p)) {
+        if (Has_status_val(Val_hp(p), caml_global_heap_state.UNMARKED)) {
+          compact_update_block(p);
+        }
+      } else {
+        /* Skip over free blocks */
+        p += wh * Wosize_hp(p);
       }
       p += wh;
     }

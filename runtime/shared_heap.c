@@ -448,7 +448,8 @@ static void* pool_allocate(struct caml_heap_state* local, sizeclass sz) {
 
   p = r->next_obj;
   /* assert that p is inside the pool */
-  CAMLassert(p >= (value*)r + POOL_HEADER_WSIZE && p < (value*)r + POOL_WSIZE);
+  CAMLassert(p >= (value*)r + POOL_HEADER_WSIZE);
+  CAMLassert(p < (value*)r + POOL_WSIZE);
   CAMLassert(POOL_BLOCK_FREE_HP(p));
 
   /* in this case there are more free blocks immediately after */

@@ -325,6 +325,10 @@ Caml_inline void pool_initialize(pool* r,
   p[0] = POOL_FREE_HEADER(pool_blocks-1);
   p[1] = 0;
 
+#ifdef DEBUG
+  for (p += 2; p < end; p++) *p = Debug_free_major;
+#endif
+
   CAMLassert((uintptr_t)end % Cache_line_bsize == 0);
 }
 

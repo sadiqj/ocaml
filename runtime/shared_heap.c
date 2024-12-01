@@ -96,8 +96,6 @@ struct caml_heap_state {
   large_alloc* swept_large;
   large_alloc* unswept_large;
 
-  sizeclass next_to_sweep;
-
   caml_domain_state* owner;
 
   struct heap_stats stats;
@@ -122,7 +120,6 @@ struct caml_heap_state* caml_init_shared_heap (void) {
       heap->avail_pools[i] = heap->full_pools[i] =
         heap->unswept_avail_pools[i] = heap->unswept_full_pools[i] = 0;
     }
-    heap->next_to_sweep = 0;
     heap->swept_large = NULL;
     heap->unswept_large = NULL;
     heap->owner = Caml_state;
@@ -590,24 +587,32 @@ static void large_alloc_finalise(struct caml_heap_state* local) {
 static void verify_swept(struct caml_heap_state*);
 
 intnat caml_sweep(struct caml_heap_state* local, intnat work) {
-  /* Sweep local pools */
-  while (work > 0 && local->next_to_sweep < NUM_SIZECLASSES) {
-    sizeclass sz = local->next_to_sweep;
-    intnat full_sweep_work = 0;
-    intnat avail_sweep_work =
-      pool_sweep(local, &local->unswept_avail_pools[sz], sz, 1);
-    work -= avail_sweep_work;
+  int all_swept = 0;
 
-    if (work > 0) {
-      full_sweep_work = pool_sweep(local,
-                                   &local->unswept_full_pools[sz],
-                                   sz, 1);
+  while( work > 0 && !all_swept ) {
+    int did_work = 0;
 
-      work -= full_sweep_work;
+    for( sizeclass sz = 0; sz < NUM_SIZECLASSES; sz++ ) {
+      intnat full_sweep_work = 0;
+      intnat avail_sweep_work = pool_sweep(local, &local->unswept_avail_pools[sz], sz, 1);
+      work -= avail_sweep_work;
+
+      if (work > 0) {
+        full_sweep_work = pool_sweep(local, &local->unswept_full_pools[sz], sz, 1);
+        work -= full_sweep_work;
+      }
+
+      if( avail_sweep_work > 0 || full_sweep_work > 0 ) {
+        did_work = 1;
+      }
+
+      if( work <= 0 ) {
+        break;
+      }
     }
 
-    if(full_sweep_work+avail_sweep_work == 0) {
-      local->next_to_sweep++;
+    if( !did_work ) {
+      all_swept = 1;
     }
   }
 
@@ -1426,8 +1431,6 @@ static void verify_large(large_alloc* a, struct mem_stats* s) {
 static void verify_swept (struct caml_heap_state* local) {
   struct mem_stats pool_stats = {0,}, large_stats = {0,};
 
-  /* sweeping should be done by this point */
-  CAMLassert(local->next_to_sweep == NUM_SIZECLASSES);
   for (int i = 0; i < NUM_SIZECLASSES; i++) {
     CAMLassert(local->unswept_avail_pools[i] == NULL);
     CAMLassert(local->unswept_full_pools[i] == NULL);
@@ -1516,8 +1519,6 @@ void caml_cycle_heap(struct caml_heap_state* local) {
   if (received_p || received_l)
     caml_gc_log("Received %d new pools, %d new large allocs",
                 received_p, received_l);
-
-  local->next_to_sweep = 0;
 }
 
 void caml_finalise_freelist(void) {

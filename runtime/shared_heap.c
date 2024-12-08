@@ -98,6 +98,8 @@ struct caml_heap_state {
 
   caml_domain_state* owner;
 
+  sizeclass next_to_sweep;
+
   struct heap_stats stats;
 };
 
@@ -592,22 +594,25 @@ intnat caml_sweep(struct caml_heap_state* local, intnat work) {
   while( work > 0 && !all_swept ) {
     int did_work = 0;
 
-    for( sizeclass sz = 0; sz < NUM_SIZECLASSES; sz++ ) {
+    sizeclass start_sz = local->next_to_sweep;
+    for (sizeclass i = 0; i < NUM_SIZECLASSES; i++) {
+      sizeclass sz = (start_sz + i) % NUM_SIZECLASSES;
       intnat full_sweep_work = 0;
       intnat avail_sweep_work = pool_sweep(local, &local->unswept_avail_pools[sz], sz, 1);
       work -= avail_sweep_work;
 
       if (work > 0) {
-        full_sweep_work = pool_sweep(local, &local->unswept_full_pools[sz], sz, 1);
-        work -= full_sweep_work;
+      full_sweep_work = pool_sweep(local, &local->unswept_full_pools[sz], sz, 1);
+      work -= full_sweep_work;
       }
 
-      if( avail_sweep_work > 0 || full_sweep_work > 0 ) {
-        did_work = 1;
+      if (avail_sweep_work > 0 || full_sweep_work > 0) {
+      did_work = 1;
       }
 
-      if( work <= 0 ) {
-        break;
+      if (work <= 0) {
+      local->next_to_sweep = (sz + 1) % NUM_SIZECLASSES;
+      break;
       }
     }
 
@@ -1515,6 +1520,9 @@ void caml_cycle_heap(struct caml_heap_state* local) {
   if (received_p || received_l) {
     adopt_all_pool_stats_with_lock(local);
   }
+
+  local->next_to_sweep = 0;
+
   caml_plat_unlock(&pool_freelist.lock);
   if (received_p || received_l)
     caml_gc_log("Received %d new pools, %d new large allocs",

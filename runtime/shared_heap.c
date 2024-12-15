@@ -63,8 +63,7 @@ static_assert(sizeof(pool) == Bsize_wsize(POOL_HEADER_WSIZE), "");
 #define POOL_BLOCK_FREE_HD(hd) \
   (Tag_hd(hd) == No_scan_tag && (Color_hd(hd) == NOT_MARKABLE))
 #define POOL_BLOCK_FREE_HP(p) (POOL_BLOCK_FREE_HD(Hd_hp(p)))
-#define POOL_FREE_HEADER(wosize) \
-  ((header_t)(((wosize) << HEADER_WOSIZE_SHIFT) | NOT_MARKABLE | No_scan_tag))
+#define POOL_FREE_HEADER(wosize) Make_header(wosize, No_scan_tag, NOT_MARKABLE)
 
 typedef struct large_alloc {
   caml_domain_state* owner;

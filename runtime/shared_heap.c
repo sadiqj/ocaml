@@ -406,8 +406,18 @@ static void* pool_allocate(struct caml_heap_state* local, sizeclass sz) {
   CAMLassert(p[0] == 0);
   if (!next) {
     local->avail_pools[sz] = r->next;
-    r->next = local->full_pools[sz];
-    local->full_pools[sz] = r;
+    /* Find last pool in full_pools list and append r */
+    if (local->full_pools[sz] == NULL) {
+      local->full_pools[sz] = r;
+      r->next = NULL;
+    } else {
+      pool* p = local->full_pools[sz];
+      while (p->next != NULL) {
+        p = p->next;
+      }
+      p->next = r;
+      r->next = NULL;
+    }
   }
 
   CAMLassert(r->next_obj == 0 || *r->next_obj == 0);

@@ -373,6 +373,15 @@ static pool* pool_find(struct caml_heap_state* local, sizeclass sz) {
   r = local->avail_pools[sz];
   if (r) return r;
 
+  /* now let's try sweeping one full pool */
+  if (local->unswept_full_pools[sz]) {
+    Caml_state->major_work_done_between_slices +=
+      pool_sweep(local, &local->unswept_full_pools[sz], sz, 0);
+  }
+
+  r = local->avail_pools[sz];
+  if (r) return r;
+
   /* Haven't managed to find a pool locally, try the global ones */
   r = pool_global_adopt(local, sz);
   if (r) return r;

@@ -652,7 +652,7 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
     CAMLassert(p == end);
 
     if( !all_used ) {
-      /* the last free block should have 0 as it's next pointer */
+      /* the last free block should have 0 as its next pointer */
       last_free_block[1] = 0;
     }
 

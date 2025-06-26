@@ -627,10 +627,8 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
                                                   + Wosize_hd(hd) + 1);
           } else {
             /* in this case there's a non-free block between us so update
-                the next pointer if necessary */
-            if( last_free_block[1] != (value)p ) {
-              last_free_block[1] = (value)p;
-            }
+                the next pointer */
+            last_free_block[1] = (value)p;
 
             last_free_block = p;
           }

@@ -1384,7 +1384,7 @@ void caml_compact_heap(caml_domain_state* domain_state,
 
               CAMLassert((header_t*)next <= POOL_END(to_pool));
 
-              *next = POOL_FREE_HEADER(Wosize_hp(new_p) - 1);
+              *next = POOL_FREE_HEADER(wosize - 1);
               next[1] = new_p[1];
               to_pool->next_obj = next;
             } else {

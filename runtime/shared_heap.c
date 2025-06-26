@@ -600,7 +600,7 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
         /* update stats */
         s->pool_live_blocks--;
         s->pool_live_words -= Whsize_hd(hd);
-        local->owner->swept_words += wh;
+        local->owner->swept_words += Whsize_hd(hd);
         s->pool_frag_words -= (wh - Whsize_hd(hd));
 
         /* reload hd */

@@ -613,7 +613,7 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
       to point to this one */
       if (POOL_BLOCK_FREE_HD(hd)) {
         /* if any block is free then this is no longer a full pool */
-        CAMLassert (all_used == 0);
+        all_used = 0;
 
         /* if there was a free block before us, check first if we can
            merge with it */

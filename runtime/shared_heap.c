@@ -561,7 +561,7 @@ static intnat pool_sweep(struct caml_heap_state* local, pool** plist,
 
     work = end - p;
     do {
-      header_t hd = (header_t)*p;
+      header_t hd = (header_t)atomic_load_relaxed((atomic_uintnat*)p);
 
       if( (char*)p + caml_plat_pagesize < (char*)end ) {
         caml_prefetch((char*)p + caml_plat_pagesize);

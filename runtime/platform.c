@@ -301,12 +301,22 @@ void caml_plat_barrier_wait_sense(caml_plat_barrier* barrier,
 
 /* Memory management */
 
+static uintnat round_up(uintnat size, uintnat align) {
+  CAMLassert(Is_power_of_2(align));
+  return (size + align - 1) & ~(align - 1);
+}
+
 intnat caml_plat_pagesize = 0;
 intnat caml_plat_mmap_alignment = 0;
 
+uintnat caml_mem_round_up_mapping_size(uintnat size)
+{
+  return round_up(size, caml_plat_pagesize);
+}
+
 uintnat caml_mem_round_up_pages(uintnat size)
 {
-  return caml_round_up(size, caml_plat_pagesize);
+  return round_up(size, caml_plat_pagesize);
 }
 
 #define Is_page_aligned(size) ((size & (caml_plat_pagesize - 1)) == 0)
